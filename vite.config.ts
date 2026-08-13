@@ -1,21 +1,31 @@
 import path from 'node:path';
 
 import tailwindcss from '@tailwindcss/vite';
-import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // Aplicação de página única, entregue como artefato estático (ADR-0016 §3).
 // Não existe servidor de renderização — o cookie de sessão vai direto do
 // navegador para a API (ADR-0013 §8).
 export default defineConfig({
-  plugins: [TanStackRouterVite(), react(), tailwindcss()],
+  plugins: [
+    tanstackRouter({
+      // O roteamento raiz vive em app/, conforme ADR-0015 §3. As telas moram
+      // nas features; as rotas apenas as compõem.
+      routesDirectory: 'src/app/routes',
+      generatedRouteTree: 'src/app/routeTree.gen.ts',
+      autoCodeSplitting: true,
+    }),
+    react(),
+    tailwindcss(),
+  ],
 
   resolve: {
     alias: {
-      '@app': path.resolve(__dirname, './src/app'),
-      '@shared': path.resolve(__dirname, './src/shared'),
-      '@features': path.resolve(__dirname, './src/features'),
+      '@app': path.resolve(import.meta.dirname, './src/app'),
+      '@shared': path.resolve(import.meta.dirname, './src/shared'),
+      '@features': path.resolve(import.meta.dirname, './src/features'),
     },
   },
 

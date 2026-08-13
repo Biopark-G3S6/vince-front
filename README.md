@@ -64,13 +64,13 @@ botão é experiência de uso, não segurança — quem autoriza é o backend (`
 
 ## Comandos
 
-| Comando | O que faz |
-| :--- | :--- |
-| `pnpm run verify` | **A porta de verificação**: tipos, lint, formatação, fronteiras e testes |
-| `pnpm run dev` | Servidor de desenvolvimento |
-| `pnpm run api:types` | Regenera os tipos a partir da especificação do backend |
-| `pnpm run test:e2e` | Testes ponta a ponta (fora da porta de verificação, por duração) |
-| `pnpm run docs:update` | Atualiza o submódulo de documentação |
+| Comando                | O que faz                                                                |
+| :--------------------- | :----------------------------------------------------------------------- |
+| `pnpm run verify`      | **A porta de verificação**: tipos, lint, formatação, fronteiras e testes |
+| `pnpm run dev`         | Servidor de desenvolvimento                                              |
+| `pnpm run api:types`   | Regenera os tipos a partir da especificação do backend                   |
+| `pnpm run test:e2e`    | Testes ponta a ponta (fora da porta de verificação, por duração)         |
+| `pnpm run docs:update` | Atualiza o submódulo de documentação                                     |
 
 ## Metas de experiência
 

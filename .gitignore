@@ -37,3 +37,4 @@ Thumbs.db
 .idea
 .vscode/*
 !.vscode/extensions.json
+src/app/routeTree.gen.ts

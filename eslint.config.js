@@ -14,7 +14,7 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'docs/**', 'coverage/**', 'src/routeTree.gen.ts'] },
+  { ignores: ['dist/**', 'node_modules/**', 'docs/**', 'coverage/**', 'src/app/routeTree.gen.ts'] },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -33,6 +33,11 @@ export default tseslint.config(
     files: ['**/*.{ts,tsx}'],
     plugins: { boundaries },
     settings: {
+      // Sem o resolvedor de TypeScript, importações relativas para arquivos .ts
+      // e .tsx não são resolvidas e o plugin as classifica como desconhecidas.
+      'import/resolver': {
+        typescript: { alwaysTryTypes: true, project: './tsconfig.json' },
+      },
       'boundaries/include': ['src/**/*.{ts,tsx}'],
       'boundaries/elements': [
         { type: 'app', pattern: 'src/app/**' },

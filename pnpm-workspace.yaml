@@ -1,0 +1,10 @@
+# Scripts de instalação autorizados explicitamente.
+#
+# O pnpm bloqueia scripts de instalação de dependências por padrão. Marcar um
+# pacote como `true` significa permitir que ele execute código arbitrário durante
+# a instalação. Não acrescente sem saber por quê.
+
+allowBuilds:
+  esbuild: true
+  lefthook: true
+  unrs-resolver: true
