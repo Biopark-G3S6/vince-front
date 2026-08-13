@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+/*
+ * Tokens de design declarados em ponto único (ADR-0016 §18).
+ *
+ * Valor arbitrário não deve ser usado quando houver token equivalente (§19):
+ * `p-4` em vez de `p-[17px]`. A dispersão de valores é o que faz um sistema
+ * de design deixar de ser sistema.
+ *
+ * Tailwind 4 usa configuração em CSS pela diretiva @theme, não mais em
+ * tailwind.config.js. Confirme a versão instalada antes de alterar.
+ */
+
+@theme {
+  /* Substituir pela paleta do projeto. */
+  --color-marca-50: oklch(0.97 0.02 265);
+  --color-marca-500: oklch(0.55 0.18 265);
+  --color-marca-900: oklch(0.28 0.1 265);
+
+  --radius-padrao: 0.5rem;
+}
+
+@layer base {
+  html {
+    /* Sem rolagem horizontal do corpo em nenhuma largura. */
+    overflow-x: hidden;
+  }
+}

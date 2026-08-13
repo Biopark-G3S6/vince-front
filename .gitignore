@@ -1,0 +1,39 @@
+# Dependências e build
+/node_modules
+/dist
+/dist-ssr
+/build
+
+# Cobertura e artefatos de teste
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# Variáveis de ambiente — .env.example é versionado
+.env*
+!.env.example
+
+# Tipos derivados da especificação do backend (ADR-0017 §3):
+# versionados, para que a divergência reprove o build. NÃO ignorar.
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ferramentas
+.eslintcache
+*.tsbuildinfo
+.vite
+
+# Editores e sistema operacional
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json

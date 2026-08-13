@@ -1,0 +1,40 @@
+# Verificação automatizada (ADR-0023 §14).
+#
+# Executa o MESMO comando definido em package.json (`pnpm verify`), sem duplicar
+# a definição (ADR-0023 §9).
+#
+# A barreira efetiva é a proteção de ramificação exigindo este workflow aprovado
+# como condição de incorporação (ADR-0023 §17).
+
+name: Verificação
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    name: Verificar
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Traz a documentação referenciada como submódulo (ADR-0023 §13).
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Verificar
+        run: pnpm run verify
+
+      - name: Construir
+        run: pnpm run build
