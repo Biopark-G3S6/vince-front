@@ -72,9 +72,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       {route === 'landing' && <AccessLandingPage />}
-      {route === 'login' && (
-        <LoginPage onAuthenticated={() => navigateTo('/admin/instituicoes')} />
-      )}
+      {route === 'login' && <LoginPage onAuthenticated={() => navigateTo('/admin/instituicoes')} />}
       {route === 'recoverAccess' && <RecoverAccessPage />}
       {route === 'institutions' && <InstitutionsPage />}
       <Toaster richColors closeButton />

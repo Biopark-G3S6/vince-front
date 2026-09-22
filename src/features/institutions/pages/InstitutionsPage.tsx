@@ -68,7 +68,9 @@ export function InstitutionsPage() {
               <ChevronRightIcon className="h-4 w-4" />
               <span className="font-bold text-vince-text">Instituições</span>
             </nav>
-            <h1 className="text-4xl font-extrabold tracking-normal text-vince-text">Instituições</h1>
+            <h1 className="text-4xl font-extrabold tracking-normal text-vince-text">
+              Instituições
+            </h1>
           </div>
 
           <Button

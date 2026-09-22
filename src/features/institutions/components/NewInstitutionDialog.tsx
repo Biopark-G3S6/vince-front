@@ -28,11 +28,7 @@ const initialForm: FormState = {
   admin: '',
 };
 
-export function NewInstitutionDialog({
-  open,
-  onCreate,
-  onOpenChange,
-}: NewInstitutionDialogProps) {
+export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstitutionDialogProps) {
   const titleId = useId();
   const descriptionId = useId();
   const [form, setForm] = useState<FormState>(initialForm);

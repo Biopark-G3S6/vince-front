@@ -88,7 +88,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
               />
               Lembrar de mim
             </label>
-            <a className="font-semibold text-vince-primary hover:underline" href="/recuperar-acesso">
+            <a
+              className="font-semibold text-vince-primary hover:underline"
+              href="/recuperar-acesso"
+            >
               Esqueci minha senha
             </a>
           </div>
