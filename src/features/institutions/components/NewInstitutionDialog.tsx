@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 
 import { Button } from '@shared/ui';
 
-import type { Institution, InstitutionStatus } from '../model/institution';
+import { makeInitials, type Institution, type InstitutionStatus } from '../model/institution';
 
 type NewInstitutionDialogProps = {
   open: boolean;
@@ -14,18 +14,28 @@ type NewInstitutionDialogProps = {
 
 type FormState = {
   name: string;
+  acronym: string;
+  legalId: string;
+  domain: string;
+  supportEmail: string;
   city: string;
   state: string;
   status: InstitutionStatus;
-  admin: string;
+  adminName: string;
+  adminEmail: string;
 };
 
 const initialForm: FormState = {
   name: '',
+  acronym: '',
+  legalId: '',
+  domain: '',
+  supportEmail: '',
   city: '',
   state: '',
   status: 'active',
-  admin: '',
+  adminName: '',
+  adminEmail: '',
 };
 
 export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstitutionDialogProps) {
@@ -43,6 +53,10 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
     onCreate({
       id: crypto.randomUUID(),
       name: form.name.trim(),
+      acronym: form.acronym.trim().toUpperCase(),
+      legalId: form.legalId.trim(),
+      domain: form.domain.trim().toLowerCase(),
+      supportEmail: form.supportEmail.trim().toLowerCase(),
       city: form.city.trim(),
       state: form.state.trim().toUpperCase(),
       status: form.status,
@@ -53,20 +67,19 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
       })
         .format(new Date())
         .replace('.', ''),
-      admins: form.admin.trim()
-        ? [
-            {
-              initials: form.admin
-                .trim()
-                .split(/\s+/)
-                .slice(0, 2)
-                .map((part) => part[0]?.toUpperCase() ?? '')
-                .join(''),
-              name: form.admin.trim(),
-              tone: 'primary',
-            },
-          ]
-        : [],
+      coursesActive: 0,
+      admins:
+        form.adminName.trim() && form.adminEmail.trim()
+          ? [
+              {
+                id: crypto.randomUUID(),
+                initials: makeInitials(form.adminName),
+                name: form.adminName.trim(),
+                email: form.adminEmail.trim().toLowerCase(),
+                tone: 'primary',
+              },
+            ]
+          : [],
     });
 
     setForm(initialForm);
@@ -76,29 +89,71 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-[#24151a]/45" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-[#24151a]/45 backdrop-blur-sm" />
         <Dialog.Content
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,540px)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-vince-border bg-white p-7 shadow-2xl"
+          className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[min(94vw,720px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-8 shadow-2xl"
         >
           <Dialog.Title className="text-2xl font-extrabold text-vince-text" id={titleId}>
             Nova instituição
           </Dialog.Title>
-          <Dialog.Description className="mt-2 text-vince-muted" id={descriptionId}>
-            Cadastre uma instituição para administração no portal acadêmico.
+          <Dialog.Description className="mt-2 max-w-2xl text-vince-muted" id={descriptionId}>
+            Registre a fronteira institucional de dados, suporte e administradores iniciais.
           </Dialog.Description>
 
-          <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-vince-muted">Nome</span>
-              <input
-                className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
-                onChange={(event) => updateForm('name', event.target.value)}
-                required
-                value={form.name}
-              />
-            </label>
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                  Nome institucional
+                </span>
+                <input
+                  className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => updateForm('name', event.target.value)}
+                  required
+                  value={form.name}
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">Sigla</span>
+                <input
+                  className="h-11 w-full rounded-padrao border border-vince-border px-4 uppercase text-vince-text focus:border-vince-primary"
+                  maxLength={8}
+                  onChange={(event) => updateForm('acronym', event.target.value)}
+                  required
+                  value={form.acronym}
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                  CNPJ / identificador
+                </span>
+                <input
+                  className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => updateForm('legalId', event.target.value)}
+                  required
+                  value={form.legalId}
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                  Domínio institucional
+                </span>
+                <input
+                  className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => updateForm('domain', event.target.value)}
+                  placeholder="instituicao.edu.br"
+                  required
+                  value={form.domain}
+                />
+              </label>
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-[1fr_96px]">
               <label className="block">
@@ -114,7 +169,7 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-vince-muted">UF</span>
                 <input
-                  className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
+                  className="h-11 w-full rounded-padrao border border-vince-border px-4 uppercase text-vince-text focus:border-vince-primary"
                   maxLength={2}
                   onChange={(event) => updateForm('state', event.target.value)}
                   required
@@ -125,15 +180,39 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
 
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-vince-muted">
-                Administrador responsável
+                E-mail de suporte
               </span>
               <input
                 className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
-                onChange={(event) => updateForm('admin', event.target.value)}
-                placeholder="Nome completo"
-                value={form.admin}
+                onChange={(event) => updateForm('supportEmail', event.target.value)}
+                required
+                type="email"
+                value={form.supportEmail}
               />
             </label>
+
+            <div className="rounded-lg border border-vince-border bg-[#fffafa] p-5">
+              <p className="font-bold text-vince-text">Administrador institucional inicial</p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-vince-muted">Nome</span>
+                  <input
+                    className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
+                    onChange={(event) => updateForm('adminName', event.target.value)}
+                    value={form.adminName}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-vince-muted">E-mail</span>
+                  <input
+                    className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
+                    onChange={(event) => updateForm('adminEmail', event.target.value)}
+                    type="email"
+                    value={form.adminEmail}
+                  />
+                </label>
+              </div>
+            </div>
 
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-vince-muted">Status</span>

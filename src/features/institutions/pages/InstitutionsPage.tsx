@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { AdminShell } from '@features/admin';
 import {
   Button,
   ChevronLeftIcon,
@@ -13,7 +14,7 @@ import {
 
 import { cn } from '@shared/lib/cn';
 
-import { AdminShell } from '../components/AdminShell';
+import { InstitutionDetailsDialog } from '../components/InstitutionDetailsDialog';
 import { NewInstitutionDialog } from '../components/NewInstitutionDialog';
 import {
   initialInstitutions,
@@ -38,28 +39,71 @@ export function InstitutionsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | InstitutionStatus>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedInstitutionId, setSelectedInstitutionId] = useState<string | null>(null);
+
+  const selectedInstitution = useMemo(
+    () => institutions.find((institution) => institution.id === selectedInstitutionId) ?? null,
+    [institutions, selectedInstitutionId],
+  );
 
   const visibleInstitutions = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
 
     return institutions.filter((institution) => {
+      const searchable = [
+        institution.name,
+        institution.acronym,
+        institution.legalId,
+        institution.domain,
+        institution.city,
+        institution.state,
+        institution.supportEmail,
+      ]
+        .join(' ')
+        .toLocaleLowerCase('pt-BR');
+
       const matchesStatus = status === 'all' || institution.status === status;
-      const matchesSearch =
-        normalizedSearch.length === 0 ||
-        `${institution.name} ${institution.city} ${institution.state}`
-          .toLocaleLowerCase('pt-BR')
-          .includes(normalizedSearch);
+      const matchesSearch = normalizedSearch.length === 0 || searchable.includes(normalizedSearch);
 
       return matchesStatus && matchesSearch;
     });
   }, [institutions, search, status]);
 
+  const activeCount = institutions.filter((institution) => institution.status === 'active').length;
+  const inactiveCount = institutions.length - activeCount;
+  const adminsCount = institutions.reduce(
+    (total, institution) => total + institution.admins.length,
+    0,
+  );
+
   function handleCreate(institution: Institution) {
     setInstitutions((current) => [institution, ...current]);
+    setSelectedInstitutionId(institution.id);
+  }
+
+  function handleUpdate(institution: Institution) {
+    setInstitutions((current) =>
+      current.map((currentInstitution) =>
+        currentInstitution.id === institution.id ? institution : currentInstitution,
+      ),
+    );
+  }
+
+  function toggleInstitutionStatus(institutionId: string) {
+    setInstitutions((current) =>
+      current.map((institution) =>
+        institution.id === institutionId
+          ? {
+              ...institution,
+              status: institution.status === 'active' ? 'inactive' : 'active',
+            }
+          : institution,
+      ),
+    );
   }
 
   return (
-    <AdminShell>
+    <AdminShell activeSection="institutions">
       <main className="px-6 py-12 lg:px-[50px]">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -71,6 +115,9 @@ export function InstitutionsPage() {
             <h1 className="text-4xl font-extrabold tracking-normal text-vince-text">
               Instituições
             </h1>
+            <p className="mt-3 max-w-3xl text-vince-muted">
+              Mantenha a fronteira institucional dos dados, suporte e administradores responsáveis.
+            </p>
           </div>
 
           <Button
@@ -83,7 +130,13 @@ export function InstitutionsPage() {
           </Button>
         </div>
 
-        <section className="mt-14 rounded-[18px] border border-vince-border bg-white p-5">
+        <section className="mt-10 grid gap-4 md:grid-cols-3">
+          <Metric label="Instituições ativas" value={String(activeCount)} />
+          <Metric label="Instituições inativas" value={String(inactiveCount)} tone="muted" />
+          <Metric label="Administradores vinculados" value={String(adminsCount)} />
+        </section>
+
+        <section className="mt-8 rounded-[18px] border border-vince-border bg-white p-5">
           <div className="flex flex-col gap-5 lg:flex-row">
             <label className="relative min-w-0 flex-1">
               <span className="sr-only">Buscar instituições</span>
@@ -91,7 +144,7 @@ export function InstitutionsPage() {
               <input
                 className="h-12 w-full rounded-lg border border-vince-border bg-white pl-14 pr-5 text-lg text-vince-muted placeholder:text-vince-muted focus:border-vince-primary"
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar instituições..."
+                placeholder="Buscar por nome, sigla, domínio ou identificador..."
                 value={search}
               />
             </label>
@@ -116,22 +169,27 @@ export function InstitutionsPage() {
           </div>
         </section>
 
-        <section className="mt-12 overflow-hidden rounded-[14px] border border-vince-border bg-white shadow-sm">
+        <section className="mt-10 overflow-hidden rounded-[14px] border border-vince-border bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <div className="grid min-w-[900px] grid-cols-[2.2fr_0.8fr_1.4fr_1.2fr_0.45fr] border-b border-vince-border bg-[#fbf8f8] px-8 py-6 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
+            <div className="grid min-w-[1040px] grid-cols-[2.1fr_0.8fr_1.2fr_0.75fr_1fr_0.5fr] border-b border-vince-border bg-[#fbf8f8] px-8 py-6 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
               <span>Nome</span>
               <span>Status</span>
               <span>Administradores</span>
+              <span>Cursos</span>
               <span>Data de cadastro</span>
               <span>Ações</span>
             </div>
 
             {visibleInstitutions.map((institution) => (
-              <InstitutionRow institution={institution} key={institution.id} />
+              <InstitutionRow
+                institution={institution}
+                key={institution.id}
+                onSelect={() => setSelectedInstitutionId(institution.id)}
+              />
             ))}
 
             {visibleInstitutions.length === 0 && (
-              <div className="min-w-[900px] px-8 py-14 text-center text-vince-muted">
+              <div className="min-w-[1040px] px-8 py-14 text-center text-vince-muted">
                 Nenhuma instituição encontrada.
               </div>
             )}
@@ -139,7 +197,8 @@ export function InstitutionsPage() {
 
           <div className="flex items-center justify-between border-t border-vince-border px-8 py-5 text-sm text-vince-muted">
             <span>
-              Mostrando 1-{visibleInstitutions.length} de {institutions.length + 42} instituições
+              Mostrando {visibleInstitutions.length ? 1 : 0}-{visibleInstitutions.length} de{' '}
+              {institutions.length} instituições
             </span>
             <div className="flex items-center gap-5">
               <button
@@ -166,19 +225,48 @@ export function InstitutionsPage() {
         onOpenChange={setIsDialogOpen}
         open={isDialogOpen}
       />
+      <InstitutionDetailsDialog
+        institution={selectedInstitution}
+        onClose={() => setSelectedInstitutionId(null)}
+        onDeactivate={toggleInstitutionStatus}
+        onUpdate={handleUpdate}
+      />
     </AdminShell>
+  );
+}
+
+type MetricProps = {
+  label: string;
+  tone?: 'default' | 'muted';
+  value: string;
+};
+
+function Metric({ label, tone = 'default', value }: MetricProps) {
+  return (
+    <div className="rounded-lg border border-vince-border bg-white p-5 shadow-sm">
+      <p className="text-sm font-semibold uppercase tracking-[0.08em] text-vince-muted">{label}</p>
+      <p
+        className={cn(
+          'mt-3 text-3xl font-extrabold',
+          tone === 'muted' ? 'text-vince-muted' : 'text-vince-primary',
+        )}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 
 type InstitutionRowProps = {
   institution: Institution;
+  onSelect: () => void;
 };
 
-function InstitutionRow({ institution }: InstitutionRowProps) {
+function InstitutionRow({ institution, onSelect }: InstitutionRowProps) {
   const inactive = institution.status === 'inactive';
 
   return (
-    <article className="grid min-w-[900px] grid-cols-[2.2fr_0.8fr_1.4fr_1.2fr_0.45fr] items-center border-b border-vince-border px-8 py-6 last:border-b-0">
+    <article className="grid min-w-[1040px] grid-cols-[2.1fr_0.8fr_1.2fr_0.75fr_1fr_0.5fr] items-center border-b border-vince-border px-8 py-6 last:border-b-0">
       <div className="flex items-center gap-5">
         <span
           className={cn(
@@ -192,15 +280,16 @@ function InstitutionRow({ institution }: InstitutionRowProps) {
         <div>
           <h2
             className={cn(
-              'max-w-[290px] text-xl font-extrabold leading-7 text-vince-text',
+              'max-w-[330px] text-xl font-extrabold leading-7 text-vince-text',
               inactive && 'text-[#898083] line-through',
             )}
           >
             {institution.name}
           </h2>
           <p className={cn('text-base text-vince-muted', inactive && 'text-[#9d9497]')}>
-            {institution.city}, {institution.state}
+            {institution.acronym} · {institution.city}, {institution.state}
           </p>
+          <p className="mt-1 text-sm text-vince-muted">{institution.domain}</p>
         </div>
       </div>
 
@@ -226,32 +315,40 @@ function InstitutionRow({ institution }: InstitutionRowProps) {
       <div>
         {institution.admins.length > 0 ? (
           <div className="flex -space-x-2">
-            {institution.admins.map((admin) => (
+            {institution.admins.slice(0, 3).map((admin) => (
               <span
                 aria-label={admin.name}
                 className={cn(
                   'inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ring-2 ring-white',
                   adminToneClass[admin.tone],
                 )}
-                key={admin.name}
-                title={admin.name}
+                key={admin.id}
+                title={`${admin.name} · ${admin.email}`}
               >
                 {admin.initials}
               </span>
             ))}
+            {institution.admins.length > 3 && (
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#ded9d7] text-sm font-bold text-[#55494c] ring-2 ring-white">
+                +{institution.admins.length - 3}
+              </span>
+            )}
           </div>
         ) : (
           <span className="text-lg leading-7 text-[#9d9497]">Nenhum administrador</span>
         )}
       </div>
 
+      <span className="text-lg font-semibold text-vince-muted">{institution.coursesActive}</span>
+
       <time className={cn('text-lg text-vince-muted', inactive && 'text-[#9d9497]')}>
         {institution.createdAt}
       </time>
 
       <button
-        aria-label={`Ações para ${institution.name}`}
+        aria-label={`Detalhes de ${institution.name}`}
         className="inline-flex h-10 w-10 items-center justify-center rounded-full text-vince-primary hover:bg-vince-tertiary"
+        onClick={onSelect}
         type="button"
       >
         <MoreHorizontalIcon className="h-5 w-5" />
