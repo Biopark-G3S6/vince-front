@@ -1,0 +1,134 @@
+{
+  "page": {
+    "eyebrow": "Assistência",
+    "title": "Assistência Automatizada",
+    "description": "Verificações que o sistema executa sobre o artigo. São subsídio: apontam, e a decisão continua sendo de quem corrige.",
+    "article": "Artigo analisado",
+    "tabsLabel": "Verificações disponíveis"
+  },
+  "tabs": {
+    "summary": "Resumo das alterações",
+    "compliance": "Conformidade à norma",
+    "similarity": "Similaridade",
+    "authorship": "Indícios de autoria",
+    "consent": "Consentimento de IA"
+  },
+  "common": {
+    "run": "Verificar agora",
+    "rerun": "Verificar novamente",
+    "running": "Verificando...",
+    "checkedAt": "Verificado em {{date}}",
+    "location": "Onde ocorre",
+    "wholeDocument": "Documento",
+    "openRemark": "Abrir apontamento",
+    "openReview": "Ir para a correção"
+  },
+  "summary": {
+    "aiNotice": "Resumo gerado por serviço externo de inteligência artificial, com o consentimento da instituição. É subsídio ao orientador: não é registrado como apontamento nem apresentado à equipe.",
+    "decisionNotice": "Nenhum apontamento é validado, reaberto ou dispensado a partir deste resumo. A decisão é sempre sua, na tela de correção.",
+    "changed": "Parágrafos alterados",
+    "added": "Parágrafos novos",
+    "removed": "Parágrafos removidos",
+    "inserted": "Palavras inseridas",
+    "deleted": "Palavras removidas",
+    "highlights": "Alterações por trecho",
+    "highlight": {
+      "changed": "Alterado — {{inserted}} palavras inseridas, {{deleted}} removidas",
+      "added": "Parágrafo novo — {{inserted}} palavras",
+      "removed": "Parágrafo removido — {{deleted}} palavras"
+    },
+    "untitled": "Trecho sem título",
+    "unchangedTitle": "Apontamentos cujo trecho não mudou",
+    "unchangedEmpty": "Todos os trechos apontados foram alterados.",
+    "insufficientTitle": "Apontamentos cuja alteração aparenta não atender",
+    "insufficientEmpty": "Nenhuma alteração aparenta insuficiente.",
+    "insufficientHint": "O parágrafo foi alterado, mas o trecho apontado permaneceu igual.",
+    "unavailableTitle": "Resumo indisponível",
+    "continues": "A correção prossegue normalmente sem o resumo."
+  },
+  "summaryErrors": {
+    "AI_CONSENT_REQUIRED": "A instituição não consentiu com o uso de inteligência artificial, ou revogou o consentimento. O resumo não é gerado.",
+    "ARTICLE_NOT_IN_REVIEW": "O resumo é apresentado no início da correção de uma etapa. O artigo não está em correção.",
+    "NO_PREVIOUS_SUBMISSION": "Esta é a primeira entrega: não há versão anterior para comparar.",
+    "PERMISSION_DENIED": "O resumo é restrito ao orientador responsável pela equipe.",
+    "UNKNOWN": "O serviço de análise está indisponível no momento."
+  },
+  "compliance": {
+    "intro": "Confronta o artigo com a norma — formatação, estrutura e referências. A verificação aponta; não corrige e não bloqueia a entrega.",
+    "local": "Esta verificação não submete o artigo a serviço externo de inteligência artificial.",
+    "conform": "Nenhuma divergência encontrada: o artigo está em conformidade com a norma.",
+    "count_one": "{{count}} divergência",
+    "count_other": "{{count}} divergências",
+    "category": {
+      "formatting": "Formatação",
+      "structure": "Estrutura",
+      "references": "Referências"
+    },
+    "finding": {
+      "LINE_SPACING": "Entrelinha {{found}}; a norma exige {{expected}}.",
+      "LONG_QUOTE_INDENT": "Citação longa sem o recuo de {{expected}}.",
+      "HEADING_STYLE": "Título de seção fora do padrão de numeração e destaque.",
+      "CITED_NOT_REFERENCED": "{{author}} ({{year}}) é citado no texto e não consta na lista de referências.",
+      "REFERENCED_NOT_CITED": "{{author}} ({{year}}) consta nas referências e não é citado no texto.",
+      "SECTION_MISSING": "Seção esperada ausente: {{section}}."
+    }
+  },
+  "similarity": {
+    "intro": "Confronta o texto com os artigos já produzidos na plataforma. A verificação aponta; não acusa. Citação corretamente referenciada não é contada.",
+    "advisorNote": "A decisão sobre o que constitui plágio é do orientador.",
+    "studentNote": "Você pode verificar antes de entregar. A equipe de origem não é identificada.",
+    "total": "Proporção do texto com coincidência",
+    "matches": "Trechos coincidentes",
+    "share": "{{share}} do texto",
+    "origin": "Origem: “{{article}}” — {{team}}, {{year}}",
+    "originHidden": "Origem não identificada para a equipe.",
+    "none": "Nenhum trecho coincidente com o acervo."
+  },
+  "authorship": {
+    "factsNotice": "São fatos registrados, não julgamento. Nenhum indício, isolado ou combinado, constitui prova de autoria; servem de subsídio à conversa com a equipe e não são apresentados a ela.",
+    "restricted": "Os indícios de autoria são restritos ao orientador responsável pela equipe.",
+    "largeInsertions": "Inserções de grande volume em ato único",
+    "characters": "{{count}} caracteres",
+    "sessions": "Sessões de edição",
+    "minutes": "{{count}} min",
+    "revised": "Texto revisado após a primeira escrita",
+    "byMember": "Autoria por integrante",
+    "import": "Metadados do arquivo importado",
+    "importNone": "O artigo não possui conteúdo importado.",
+    "editingTime": "Tempo total de edição",
+    "revisions": "Número de revisões",
+    "application": "Aplicativo de origem",
+    "declaredAuthor": "Autor declarado"
+  },
+  "consent": {
+    "title": "Consentimento institucional",
+    "restricted": "O consentimento é registrado pelo administrador institucional.",
+    "status": "Situação",
+    "active": "Consentimento vigente",
+    "inactive": "Sem consentimento vigente",
+    "institution": "Instituição",
+    "declaration": "O que é declarado — versão {{version}}",
+    "whatTitle": "O que é enviado",
+    "whatBody": "A diferença entre duas entregas do artigo e o texto dos apontamentos pendentes.",
+    "whyTitle": "Com que finalidade",
+    "whyBody": "Gerar, para o orientador, o resumo das alterações no início da correção. Nunca para avaliar o aluno nem atribuir nota.",
+    "whoTitle": "A que serviço",
+    "whoBody": "Serviço externo de inteligência artificial contratado pela plataforma.",
+    "scope": "O consentimento é por instituição e alcança todos os seus artigos. A revogação vale a partir do registro e não desfaz o que já foi processado. As demais verificações não dependem dele.",
+    "grant": "Registrar consentimento",
+    "revoke": "Revogar consentimento",
+    "history": "Registro de decisões",
+    "record": {
+      "GRANTED": "Consentimento registrado",
+      "REVOKED": "Consentimento revogado"
+    },
+    "recordMeta": "{{by}} · {{date}} · declaração {{version}}",
+    "granted": "Consentimento registrado.",
+    "revoked": "Consentimento revogado."
+  },
+  "errors": {
+    "PERMISSION_DENIED": "Você não tem permissão para esta ação.",
+    "RESOURCE_NOT_FOUND": "O artigo está fora do seu alcance.",
+    "UNKNOWN": "Não foi possível concluir a verificação. Tente novamente."
+  }
+}

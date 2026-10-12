@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { CreateTeamDialog } from '@features/articles';
+import { ArticleList } from '@features/review';
 import { Button, PlusIcon, SearchIcon, UserIcon, UsersIcon } from '@shared/ui';
 
 import {
@@ -22,6 +24,7 @@ const articleStatusView: Record<
 };
 
 export function TeamsPage() {
+  const [creating, setCreating] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? '');
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0];
   const totalMembers = teams.reduce((total, team) => total + team.members.length, 0);
@@ -31,17 +34,21 @@ export function TeamsPage() {
       actions={
         <>
           <Button variant="outline">Convidar aluno</Button>
-          <Button className="rounded-padrao px-7">
+          <Button className="rounded-padrao px-7" onClick={() => setCreating(true)}>
             <PlusIcon className="h-5 w-5" />
             Criar equipe
           </Button>
         </>
       }
       activeSection="teams"
+      personaRoles={['advisor', 'coordinator', 'institutionAdmin']}
       description="Forme equipes por evento, controle vagas, convites, alunos elegíveis e orientador responsável."
       eyebrow="Equipes"
       title="Equipes"
     >
+      <ArticleList title="Equipes e artigos" />
+      <CreateTeamDialog onOpenChange={setCreating} open={creating} />
+
       <section className="mt-8 grid gap-4 md:grid-cols-4">
         <MetricCard
           icon={<UsersIcon className="h-5 w-5" />}

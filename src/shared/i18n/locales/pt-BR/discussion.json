@@ -1,0 +1,100 @@
+{
+  "discussion": {
+    "eyebrow": "Discussão",
+    "title": "Discussão da Equipe",
+    "description": "Conversa única e contínua entre a equipe e o orientador responsável, aberta em todas as etapas do artigo.",
+    "articleLabel": "Artigo",
+    "alwaysOpen": "A discussão permanece aberta em todos os estados do artigo, inclusive durante a correção.",
+    "liveOn": "Atualização em tempo real ativa",
+    "liveHint": "Mensagens de outros participantes aparecem sem recarregar a página.",
+    "participants": "Participantes",
+    "participantsHint": "Toda mensagem é visível a todos os participantes.",
+    "advisorTag": "Orientador",
+    "you": "você",
+    "empty": "Nenhuma mensagem ainda.",
+    "emptyHint": "Publique a primeira mensagem para iniciar a conversa com a equipe.",
+    "noAccessTitle": "Você não participa desta discussão",
+    "noAccessBody": "Participam apenas os integrantes da equipe e o orientador responsável por ela.",
+    "composerLabel": "Nova mensagem",
+    "composerPlaceholder": "Escreva uma mensagem para a equipe...",
+    "publish": "Publicar",
+    "reply": "Responder",
+    "replyLabel": "Resposta a {{name}}",
+    "replyPlaceholder": "Escreva a resposta...",
+    "sendReply": "Enviar resposta",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "deleted": "Mensagem excluída pelo autor.",
+    "rootDeleted": "A mensagem original foi excluída.",
+    "remarkReference": "Em resposta ao apontamento",
+    "openRemark": "Ver apontamento",
+    "replyCount_one": "{{count}} resposta",
+    "replyCount_other": "{{count}} respostas",
+    "published": "Mensagem publicada.",
+    "removed": "Mensagem excluída."
+  },
+  "notifications": {
+    "eyebrow": "Notificações",
+    "title": "Notificações",
+    "description": "Fatos que exigem ação ou atenção sua, do mais recente para o mais antigo.",
+    "bell": "Notificações",
+    "bellUnread_one": "Notificações — {{count}} não lida",
+    "bellUnread_other": "Notificações — {{count}} não lidas",
+    "filterAll": "Todas",
+    "filterUnread": "Não lidas",
+    "markAll": "Marcar todas como lidas",
+    "markRead": "Marcar como lida",
+    "open": "Abrir",
+    "unread": "Não lida",
+    "empty": "Nenhuma notificação.",
+    "emptyUnread": "Você está em dia: nenhuma notificação não lida.",
+    "listTitle": "Suas notificações",
+    "emailTitle": "Receber também por e-mail",
+    "emailHint": "A notificação na interface não pode ser desligada. O e-mail é enviado no idioma do destinatário.",
+    "allRead": "Notificações marcadas como lidas."
+  },
+  "notificationTypes": {
+    "SUBMISSION_DELIVERED": {
+      "label": "Entrega de etapa",
+      "text": "{{actor}} entregou a etapa “{{milestone}}” de “{{article}}”."
+    },
+    "SUBMISSION_AUTO_CLOSED": {
+      "label": "Entrega automática por prazo",
+      "text": "O prazo da etapa “{{milestone}}” venceu e “{{article}}” foi entregue automaticamente."
+    },
+    "ARTICLE_RETURNED": {
+      "label": "Devolução do artigo",
+      "text": "{{actor}} devolveu “{{article}}” com os apontamentos da etapa “{{milestone}}”."
+    },
+    "MESSAGE_POSTED": {
+      "label": "Nova mensagem na discussão",
+      "text": "{{actor}} publicou uma mensagem na discussão de “{{article}}”."
+    },
+    "REMARK_UPDATED": {
+      "label": "Alteração de apontamento",
+      "text": "{{actor}} alterou um apontamento já devolvido em “{{article}}”."
+    },
+    "REMARK_DECIDED": {
+      "label": "Decisão sobre apontamento",
+      "text": "{{actor}} decidiu sobre um apontamento de “{{article}}”."
+    },
+    "ARTICLE_CONCLUDED": {
+      "label": "Conclusão do artigo",
+      "text": "{{actor}} concluiu o artigo “{{article}}”."
+    },
+    "DEADLINE_APPROACHING": {
+      "label": "Prazo próximo",
+      "text": "O prazo da etapa “{{milestone}}” de “{{article}}” está próximo."
+    },
+    "TEAM_AT_RISK": {
+      "label": "Equipe parada ou em risco",
+      "text": "A {{team}} (“{{article}}”) recebeu um sinal de atenção."
+    }
+  },
+  "errors": {
+    "RESOURCE_NOT_FOUND": "O conteúdo não foi encontrado ou está fora do seu alcance.",
+    "VALIDATION_FAILED": "Escreva a mensagem antes de publicar.",
+    "PERMISSION_DENIED": "Você não tem permissão para esta ação.",
+    "UNKNOWN": "Não foi possível concluir a ação. Tente novamente."
+  }
+}

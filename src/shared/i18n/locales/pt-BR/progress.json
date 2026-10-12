@@ -1,0 +1,142 @@
+{
+  "page": {
+    "eyebrow": "Acompanhamento",
+    "title": "Acompanhamento e Relatórios",
+    "description": "O que se observa sobre o ciclo, sem interferir nele: situação das equipes, sinais de atenção, contribuição e relatório de produção.",
+    "tabsLabel": "Visões de acompanhamento",
+    "readOnly": "Esta tela apresenta o que já foi registrado. Para agir, siga para o artigo, a correção ou a discussão da equipe."
+  },
+  "tabs": {
+    "teams": "Minhas equipes",
+    "course": "Eventos do curso",
+    "contribution": "Contribuição",
+    "report": "Relatório de produção"
+  },
+  "status": {
+    "STARTED": "Started",
+    "IN_PROGRESS": "In Progress",
+    "IN_REVIEW": "In Review",
+    "FINISHED": "Finished"
+  },
+  "metrics": {
+    "teams": "Equipes sob orientação",
+    "withSignal": "Com sinal de atenção",
+    "notDelivered": "Sem entrega na etapa",
+    "pendingRemarks": "Apontamentos pendentes"
+  },
+  "filter": {
+    "all": "Todas",
+    "withSignal": "Com sinal",
+    "notDelivered": "Sem entrega"
+  },
+  "sort": {
+    "label": "Ordenar por",
+    "signals": "Sinais de atenção",
+    "lastEdit": "Mais tempo sem edição",
+    "deadline": "Prazo mais próximo",
+    "name": "Nome da equipe"
+  },
+  "table": {
+    "caption": "Situação das equipes",
+    "team": "Equipe e artigo",
+    "event": "Evento",
+    "status": "Situação",
+    "milestone": "Etapa corrente",
+    "delivery": "Entrega",
+    "remarks": "Apontamentos pendentes",
+    "lastEdit": "Última edição",
+    "signals": "Sinais",
+    "actions": "Ir para",
+    "deadline": "Prazo: {{date}}",
+    "advisor": "Orientador: {{name}}",
+    "noSignal": "Nenhum",
+    "article": "Artigo",
+    "review": "Correção",
+    "discussion": "Discussão",
+    "empty": "Nenhuma equipe corresponde ao filtro."
+  },
+  "delivery": {
+    "pending": "Não entregue",
+    "spontaneous": "Espontânea",
+    "automatic": "Automática"
+  },
+  "signal": {
+    "NO_RECENT_EDIT": "Sem edição há {{days}} dias ou mais",
+    "REPEATED_AUTOMATIC_DELIVERY": "Entrega automática em etapas seguidas",
+    "REMARKS_ACCUMULATED": "Apontamentos acumulados sem atendimento",
+    "MEMBER_NEVER_EDITED": "Integrante que nunca editou o artigo",
+    "DEADLINE_NEAR_WITHOUT_CHANGE": "Prazo próximo sem alteração desde a devolução"
+  },
+  "teams": {
+    "emptyTitle": "Nenhuma equipe designada a você",
+    "emptyBody": "Quando você for designado orientador responsável por uma equipe, ela aparecerá aqui.",
+    "signalNote": "Os sinais são subsídio ao orientador e ao coordenador. Não são apresentados à equipe, não alteram o artigo nem a nota, e cessam sozinhos quando a condição deixa de valer."
+  },
+  "course": {
+    "emptyTitle": "Nenhum evento no período",
+    "emptyBody": "O curso não possui eventos em andamento.",
+    "scope": {
+      "course": "Escopo de curso",
+      "class": "Escopo de turma",
+      "institution": "Escopo institucional"
+    },
+    "teams": "Equipes",
+    "delivered": "Entregaram a etapa",
+    "withSignal": "Com sinal ativo",
+    "concluded": "Artigos concluídos",
+    "schedule": "Cronograma",
+    "showTeams": "Ver equipes",
+    "hideTeams": "Ocultar equipes",
+    "coordinatorNote": "O coordenador vê a situação das equipes, mas não participa da discussão nem do ciclo de apontamentos."
+  },
+  "contribution": {
+    "team": "Equipe",
+    "member": "Integrante",
+    "textShare": "Texto de sua autoria",
+    "sessions": "Sessões de edição",
+    "remarksAddressed": "Apontamentos atendidos",
+    "messages": "Mensagens na discussão",
+    "subsidy": "O quadro é subsídio à avaliação individual. O sistema não sugere nota, não calcula nota e não ordena os integrantes por desempenho — a lista segue a ordem alfabética.",
+    "volume": "Volume de texto não é medida de contribuição: revisar, orientar a escrita e discutir também são trabalho.",
+    "private": "Este quadro não é apresentado aos integrantes da equipe.",
+    "imported": "A maior parte do texto deste artigo foi importada de documento externo e não foi produzida na plataforma. Nada se afirma sobre a divisão do trabalho.",
+    "noShare": "—",
+    "evaluate": "Atribuir notas individuais"
+  },
+  "report": {
+    "course": "Curso",
+    "period": "Período",
+    "generate": "Gerar relatório",
+    "generating": "Consolidando...",
+    "title": "Produção acadêmica — {{course}}, {{period}}",
+    "generatedAt": "Gerado em {{date}}",
+    "emptyTitle": "Sem produção registrada no período",
+    "emptyBody": "O curso não teve eventos encerrados ou em andamento em {{period}}.",
+    "factual": "O relatório é a apuração do que foi registrado. Não contém juízo, projeção nem recomendação, e não alcança o conteúdo dos artigos, os apontamentos ou a discussão das equipes.",
+    "teamsByEvent": "Equipes por evento",
+    "event": "Evento",
+    "teams": "Equipes",
+    "total": "Total",
+    "concluded": "Concluídos",
+    "notConcluded": "Não concluídos",
+    "students": "Alunos participantes",
+    "articleGrade": "Média da nota do artigo",
+    "individualGrade": "Média das notas individuais",
+    "noGrade": "Sem notas registradas",
+    "publications": "Publicações externas registradas",
+    "lagging": "Equipes que ficaram para trás",
+    "laggingHint": "Equipes com entrega registrada automaticamente por vencimento de prazo.",
+    "laggingNone": "Nenhuma equipe com entrega automática no período.",
+    "team": "Equipe",
+    "milestone": "Etapa",
+    "export": "Exportar CSV",
+    "print": "Imprimir ou salvar em PDF",
+    "exported": "Arquivo gerado."
+  },
+  "errors": {
+    "PERMISSION_DENIED": "Você não tem permissão para esta ação.",
+    "RESOURCE_NOT_FOUND": "O conteúdo não foi encontrado ou está fora do seu alcance.",
+    "REPORT_NOT_READY": "A consolidação do relatório ainda está em curso.",
+    "UNKNOWN": "Não foi possível concluir a ação. Tente novamente."
+  }
+}

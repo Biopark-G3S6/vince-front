@@ -1,0 +1,163 @@
+{
+  "page": {
+    "noAccessTitle": "Artigo fora do seu alcance",
+    "noAccessBody": "O artigo é alcançado pela equipe, pelo orientador do evento e pelo coordenador do curso."
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "save": "Salvar"
+  },
+  "status": {
+    "STARTED": "Iniciado",
+    "IN_PROGRESS": "Em andamento",
+    "IN_REVIEW": "Em correção",
+    "FINISHED": "Concluído"
+  },
+  "lock": {
+    "ARTICLE_LOCKED_FOR_REVIEW": "O artigo foi entregue e está em correção: o texto fica em modo de leitura até a devolução.",
+    "ARTICLE_ALREADY_FINISHED": "O artigo foi concluído e está em modo de leitura. A exportação continua disponível.",
+    "READ_ONLY_ROLE": "Só integrante da equipe edita o artigo. A intervenção do orientador se dá por apontamento e pela discussão."
+  },
+  "save": {
+    "saving": "Salvando...",
+    "saved": "Alterações salvas automaticamente",
+    "savedAt": "Salvo em {{date}}",
+    "error": "Não foi possível salvar: {{reason}}",
+    "readOnly": "Modo de leitura"
+  },
+  "identity": {
+    "label": "Editando como"
+  },
+  "presence": {
+    "label": "Quem está no artigo agora",
+    "you": "{{name}} (você)",
+    "editing": "{{name}} está editando"
+  },
+  "panels": {
+    "references": "Referências",
+    "history": "Histórico",
+    "close": "Fechar painel"
+  },
+  "statusBar": {
+    "references": "Referências: {{count}}",
+    "margins": "Margens (cm): superior {{top}}, direita {{right}}, inferior {{bottom}}, esquerda {{left}}"
+  },
+  "norm": {
+    "none": "Nenhuma divergência da norma encontrada. Nada foi alterado.",
+    "appliedDocument": "Formatação ABNT aplicada ao documento",
+    "appliedSelection": "Formatação ABNT aplicada ao trecho selecionado",
+    "alignment_one": "{{count}} parágrafo justificado",
+    "alignment_other": "{{count}} parágrafos justificados",
+    "lineSpacing_one": "{{count}} entrelinha ajustada para 1,5",
+    "lineSpacing_other": "{{count}} entrelinhas ajustadas para 1,5",
+    "font_one": "{{count}} trecho devolvido à fonte da norma",
+    "font_other": "{{count}} trechos devolvidos à fonte da norma",
+    "margins": "margens ajustadas para 3, 2, 2 e 3 cm"
+  },
+  "references": {
+    "intro": "A referência é dado estruturado: a lista é gerada, formatada e ordenada pelo sistema, e a citação no texto fica vinculada ao registro.",
+    "add": "Nova referência",
+    "addTitle": "Nova referência",
+    "editTitle": "Alterar referência",
+    "edit": "Alterar referência",
+    "remove": "Remover referência",
+    "removed": "Referência removida.",
+    "saved": "Referência registrada.",
+    "empty": "Nenhuma referência registrada.",
+    "cite": "Citar no texto",
+    "page": "Página (opcional na citação indireta)",
+    "direct": "Citação direta — a página é exigida",
+    "insert": "Inserir citação",
+    "missing": "Campos faltantes: {{fields}}",
+    "fieldMissing": "obrigatório",
+    "type": "Tipo",
+    "byDoi": "Preencher pelo DOI",
+    "lookup": "Buscar",
+    "byPaste": "Ou cole a referência para interpretação",
+    "interpret": "Interpretar",
+    "authorsHint": "Um autor por linha, na forma Sobrenome, Nome",
+    "types": {
+      "article": "Artigo de periódico",
+      "book": "Livro",
+      "chapter": "Capítulo de livro",
+      "thesis": "Tese ou dissertação",
+      "website": "Página da web"
+    },
+    "fields": {
+      "authors": "Autores",
+      "title": "Título",
+      "year": "Ano",
+      "vehicle": "Veículo",
+      "edition": "Edição",
+      "place": "Local",
+      "publisher": "Editora ou instituição",
+      "pages": "Páginas",
+      "doi": "DOI",
+      "url": "URL"
+    }
+  },
+  "history": {
+    "intro": "Entregas e pontos intermediários preservados pelo sistema, do mais recente para o mais antigo. Restaurar cria um estado novo; nada é apagado.",
+    "empty": "Nenhum estado preservado ainda.",
+    "restricted": "O histórico de versões é restrito aos integrantes da equipe.",
+    "back": "Voltar ao histórico",
+    "automatic": "Automática",
+    "writtenBy": "Última alteração: {{name}}",
+    "restore": "Restaurar este estado",
+    "restoreTitle": "Restaurar este estado do artigo?",
+    "restoreBody": "O conteúdo atual é substituído pelo deste ponto. A restauração entra no histórico como estado novo, e o que existe hoje continua consultável.",
+    "restored": "Estado restaurado.",
+    "kind": {
+      "delivery": "Entrega — {{milestone}}",
+      "checkpoint": "Ponto intermediário",
+      "restore": "Restauração",
+      "import": "Importação de documento",
+      "manual": "Versão salva pelo autor"
+    }
+  },
+  "import": {
+    "title": "Importar documento",
+    "description": "Carrega um arquivo .docx como conteúdo do artigo. A conversão é de melhor esforço: o que não puder ser convertido é relatado antes de você confirmar.",
+    "choose": "Arraste o arquivo .docx ou clique para escolher",
+    "converting": "Convertendo o documento...",
+    "limits": "Somente .docx, até 10 MB.",
+    "counts": {
+      "heading": "Títulos",
+      "paragraph": "Parágrafos",
+      "list": "Listas",
+      "table": "Tabelas",
+      "image": "Imagens"
+    },
+    "notConverted": "O que não pôde ser convertido",
+    "allConverted": "Nenhuma perda relatada pelo conversor.",
+    "replaceWarning": "O artigo já tem conteúdo. A importação substitui o texto atual; ele permanece consultável no histórico.",
+    "discard": "Descartar",
+    "confirm": "Confirmar importação",
+    "replace": "Substituir o conteúdo",
+    "done": "Documento importado."
+  },
+  "preview": {
+    "title": "Visualização do artigo",
+    "back": "Voltar ao editor",
+    "docx": "Exportar DOCX",
+    "pdf": "Exportar PDF",
+    "references": "Referências",
+    "advisor": "Orientador: {{name}}",
+    "exported": "Arquivo gerado.",
+    "zoomIn": "Aumentar zoom",
+    "zoomOut": "Diminuir zoom"
+  },
+  "errors": {
+    "ARTICLE_LOCKED_FOR_REVIEW": "O artigo está em correção e não pode ser alterado.",
+    "ARTICLE_ALREADY_FINISHED": "O artigo já foi concluído.",
+    "PERMISSION_DENIED": "Você não tem permissão para esta ação.",
+    "RESOURCE_NOT_FOUND": "O conteúdo não foi encontrado ou está fora do seu alcance.",
+    "VALIDATION_FAILED": "Preencha os campos obrigatórios do tipo de referência.",
+    "REFERENCE_IN_USE": "A referência está citada no texto e não pode ser removida.",
+    "PAGE_REQUIRED": "Informe a página da citação direta.",
+    "FILE_FORMAT_NOT_SUPPORTED": "Formato não suportado. Envie um arquivo .docx.",
+    "FILE_TOO_LARGE": "O arquivo ultrapassa o limite de 10 MB.",
+    "IMAGE_TOO_LARGE": "A imagem ultrapassa o limite de 300 KB.",
+    "UNKNOWN": "Não foi possível concluir a ação. Tente novamente."
+  }
+}

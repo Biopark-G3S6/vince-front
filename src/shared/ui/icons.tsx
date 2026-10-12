@@ -319,3 +319,122 @@ export function WarningIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function ChatIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
+    </IconBase>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="m5 12 5 5L20 7" />
+    </IconBase>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </IconBase>
+  );
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </IconBase>
+  );
+}
+
+export function CompareIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect height="16" rx="1" width="7" x="3" y="4" />
+      <rect height="16" rx="1" width="7" x="14" y="4" />
+    </IconBase>
+  );
+}
+
+export function DownloadIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </IconBase>
+  );
+}
+
+export function FlagIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M5 21V4" />
+      <path d="M5 4h12l-2 4 2 4H5" />
+    </IconBase>
+  );
+}
+
+export function HistoryIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v4h4" />
+      <path d="M12 8v4l3 2" />
+    </IconBase>
+  );
+}
+
+export function ReplyIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="m9 14-5-5 5-5" />
+      <path d="M4 9h10a6 6 0 0 1 6 6v4" />
+    </IconBase>
+  );
+}
+
+export function SendIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M22 2 11 13" />
+      <path d="m22 2-7 20-4-9-9-4Z" />
+    </IconBase>
+  );
+}
+
+export function SparklesIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 3 13.8 8.2 19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" />
+      <path d="M19 15v4" />
+      <path d="M17 17h4" />
+    </IconBase>
+  );
+}
+
+export function UndoIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h11a5 5 0 0 1 0 10h-4" />
+    </IconBase>
+  );
+}
+
+export function UploadIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 21V9" />
+      <path d="m7 14 5-5 5 5" />
+      <path d="M5 3h14" />
+    </IconBase>
+  );
+}

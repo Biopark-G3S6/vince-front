@@ -1,0 +1,42 @@
+{
+  "breadcrumbRoot": "Admin",
+  "nav": {
+    "dashboard": "Dashboard",
+    "institutions": "Instituições",
+    "courses": "Cursos",
+    "classes": "Turmas",
+    "events": "Eventos",
+    "teams": "Equipes",
+    "articles": "Artigos",
+    "review": "Ciclo de Correção",
+    "discussion": "Discussão e Notificações",
+    "notifications": "Notificações",
+    "assistance": "Assistência (IA)",
+    "progress": "Acompanhamento e Relatórios",
+    "language": "Internacionalização",
+    "access": "Acesso",
+    "settings": "Configurações",
+    "editor": "Edição de Artigo",
+    "templates": "Template de Artigo"
+  },
+  "shell": {
+    "tagline": "Academic Portal",
+    "menu": "Menu administrativo",
+    "expandMenu": "Expandir menu",
+    "collapseMenu": "Recolher menu",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar...",
+    "notifications": "Notificações",
+    "language": "Idioma da interface"
+  },
+  "roles": {
+    "advisor": "Orientador",
+    "student": "Aluno",
+    "coordinator": "Coordenador",
+    "institutionAdmin": "Administrador"
+  },
+  "persona": {
+    "label": "Perspectiva de demonstração",
+    "reset": "Restaurar dados de demonstração"
+  }
+}

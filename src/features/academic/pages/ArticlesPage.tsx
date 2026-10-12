@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { ArticleList } from '@features/review';
 import { Button, CheckCircleIcon, DocumentIcon, EditIcon, PlusIcon } from '@shared/ui';
 
 import {
@@ -45,6 +46,8 @@ export function ArticlesPage() {
       eyebrow="Artigos"
       title="Artigos"
     >
+      <ArticleList title="Artigos das equipes" />
+
       <section className="mt-8 grid gap-4 md:grid-cols-4">
         <MetricCard
           icon={<DocumentIcon className="h-5 w-5" />}

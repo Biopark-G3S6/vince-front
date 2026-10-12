@@ -1,0 +1,29 @@
+{
+  "page": {
+    "eyebrow": "Language",
+    "title": "Interface Language",
+    "description": "Choose the language the portal is displayed in. Dates, numbers and time zone follow the chosen language."
+  },
+  "language": {
+    "title": "Available languages",
+    "current": "In use",
+    "default": "Default",
+    "preview": "Preview",
+    "save": "Apply language",
+    "saved": "Language updated."
+  },
+  "preview": {
+    "title": "How data is displayed",
+    "date": "Date",
+    "dateTime": "Date and time",
+    "number": "Number",
+    "percent": "Percentage",
+    "relative": "Relative time",
+    "timeZone": "Display time zone"
+  },
+  "notes": {
+    "title": "What the choice covers",
+    "interface": "Translation covers the interface and system messages only.",
+    "content": "User-produced content — topic, article, remark, message — stays in the language it was written in."
+  }
+}
