@@ -1,0 +1,181 @@
+{
+  "page": {
+    "eyebrow": "Correção",
+    "title": "Ciclo de Correção",
+    "description": "Entrega da etapa, apontamentos no texto entregue, devolução à equipe e conclusão do artigo.",
+    "progress": "Progresso da Submissão",
+    "schedule": "Cronograma do evento",
+    "noAccessTitle": "Artigo fora do seu alcance",
+    "noAccessBody": "O ciclo de correção é restrito à equipe e ao orientador responsável."
+  },
+  "status": {
+    "STARTED": "Started",
+    "IN_PROGRESS": "In Progress",
+    "IN_REVIEW": "In Review",
+    "FINISHED": "Finished"
+  },
+  "milestone": {
+    "deadline": "Prazo: {{date}}",
+    "current": "Etapa corrente",
+    "upcoming": "Próxima",
+    "delivered": "Entregue",
+    "automatic": "Entrega automática",
+    "returned": "Devolvida"
+  },
+  "tabs": {
+    "label": "Seções do ciclo de correção",
+    "correction": "Correção",
+    "compare": "Comparar versões",
+    "submissions": "Entregas"
+  },
+  "banner": {
+    "studentInReview": "Artigo entregue e em correção. O texto fica somente leitura até a devolução; a discussão da equipe permanece aberta.",
+    "studentInProgress": "O artigo está em edição. Etapa corrente: “{{milestone}}”, com prazo em {{date}}.",
+    "studentPendingRemarks_one": "Há {{count}} apontamento aguardando correção ou validação.",
+    "studentPendingRemarks_other": "Há {{count}} apontamentos aguardando correção ou validação.",
+    "advisorInReview": "Selecione um trecho do texto entregue para registrar um apontamento. Os apontamentos permanecem invisíveis à equipe até a devolução.",
+    "advisorInProgress": "A equipe está editando o artigo. Apontamentos só são registrados durante a correção; fora dela, use a discussão.",
+    "automaticDelivery": "Esta entrega foi registrada automaticamente no vencimento do prazo: a equipe não entregou a etapa.",
+    "finished": "Artigo concluído. O texto é somente leitura para todos e a avaliação está habilitada.",
+    "openDiscussion": "Abrir discussão",
+    "openEvaluation": "Avaliar artigo"
+  },
+  "actions": {
+    "deliver": "Entregar etapa",
+    "undo": "Desfazer entrega",
+    "return": "Devolver à equipe",
+    "conclude": "Concluir artigo",
+    "cancel": "Cancelar",
+    "save": "Salvar"
+  },
+  "confirm": {
+    "deliverTitle": "Entregar a etapa “{{milestone}}”?",
+    "deliverBody": "A entrega congela o texto e o submete à correção do orientador. Enquanto o prazo não vencer e a correção não começar, a entrega pode ser desfeita.",
+    "returnTitle": "Devolver o artigo à equipe?",
+    "returnBody": "A devolução é ato único: publica à equipe todos os apontamentos da etapa e libera o artigo para edição.",
+    "returnNew_one": "{{count}} apontamento novo será publicado.",
+    "returnNew_other": "{{count}} apontamentos novos serão publicados.",
+    "returnNone": "Nenhum apontamento novo: a etapa será aceita sem exigências.",
+    "returnPending_one": "{{count}} apontamento pendente acompanha o artigo para a etapa seguinte.",
+    "returnPending_other": "{{count}} apontamentos pendentes acompanham o artigo para a etapa seguinte.",
+    "concludeTitle": "Concluir o artigo?",
+    "concludeBody": "A conclusão encerra o ciclo de correção. O artigo passa a somente leitura para todos e a avaliação é habilitada."
+  },
+  "document": {
+    "title": "Texto entregue",
+    "draftTitle": "Texto em edição",
+    "version": "Entrega de {{date}} · {{milestone}}",
+    "annotate": "Apontar neste parágrafo",
+    "edit": "Editar no editor",
+    "remarkCount_one": "{{count}} apontamento",
+    "remarkCount_other": "{{count}} apontamentos",
+    "selectionHint": "Selecione o trecho com o mouse, ou use “Apontar neste parágrafo”."
+  },
+  "remarks": {
+    "title": "Apontamentos",
+    "pending": "Pendentes",
+    "closed": "Encerrados",
+    "empty": "Nenhum apontamento.",
+    "emptyStudent": "Nenhum apontamento devolvido à equipe.",
+    "newTitle": "Novo apontamento",
+    "newQuote": "Trecho selecionado",
+    "newLabel": "O que deve ser corrigido",
+    "newPlaceholder": "Descreva a correção esperada...",
+    "create": "Registrar apontamento",
+    "unpublished": "Visível à equipe após a devolução",
+    "origin": "Etapa de origem: {{milestone}}",
+    "edited": "Alterado em {{date}}",
+    "history": "Texto anterior",
+    "editText": "Alterar apontamento",
+    "editLabel": "Texto do apontamento",
+    "markAddressed": "Marcar como corrigido",
+    "unmarkAddressed": "Desmarcar",
+    "awaitingValidation": "Marcar como corrigido não encerra o apontamento: o orientador valida na próxima correção.",
+    "validate": "Validar",
+    "reopen": "Reabrir",
+    "dismiss": "Dispensar",
+    "decisionHint": "A decisão é sempre do orientador e só ocorre durante a correção de uma etapa.",
+    "decidedBy": "{{decision}} por {{name}} em {{date}}",
+    "reply": "Responder",
+    "replyLabel": "Resposta ao apontamento",
+    "replyPlaceholder": "A resposta é publicada na discussão da equipe...",
+    "replyHint": "A resposta vai para a discussão da equipe, com referência a este apontamento, e não altera o seu estado.",
+    "sendReply": "Publicar na discussão",
+    "viewReplies_one": "Ver {{count}} resposta na discussão",
+    "viewReplies_other": "Ver {{count}} respostas na discussão"
+  },
+  "remarkState": {
+    "OPEN": "Aberto",
+    "ADDRESSED": "Corrigido, aguarda validação",
+    "RESOLVED": "Validado",
+    "DISMISSED": "Dispensado"
+  },
+  "decision": {
+    "RESOLVED": "Validado",
+    "REOPENED": "Reaberto",
+    "DISMISSED": "Dispensado"
+  },
+  "confront": {
+    "before": "Estado anterior — quando o apontamento foi feito",
+    "after": "Estado atual",
+    "removed": "O trecho foi removido por inteiro. O apontamento permanece válido.",
+    "unchanged": "O trecho não foi alterado desde o apontamento."
+  },
+  "compare": {
+    "select": "Entrega",
+    "option": "{{milestone}} — {{date}}",
+    "previous": "Entrega anterior",
+    "selected": "Entrega selecionada",
+    "first": "Esta é a primeira entrega: não há versão anterior para comparar.",
+    "noDifferences": "As duas entregas são idênticas.",
+    "position": "Diferença {{current}} de {{total}}",
+    "prev": "Diferença anterior",
+    "next": "Próxima diferença",
+    "legendInserted": "Inserido",
+    "legendDeleted": "Removido",
+    "absent": "Parágrafo inexistente nesta versão",
+    "summary_one": "{{count}} parágrafo alterado · {{inserted}} palavras inseridas · {{deleted}} palavras removidas",
+    "summary_other": "{{count}} parágrafos alterados · {{inserted}} palavras inseridas · {{deleted}} palavras removidas"
+  },
+  "submissions": {
+    "milestone": "Etapa",
+    "author": "Entregue por",
+    "date": "Data da entrega",
+    "kind": "Tipo",
+    "returned": "Devolução",
+    "spontaneous": "Espontânea",
+    "automatic": "Automática",
+    "system": "Sistema",
+    "inReview": "Em correção",
+    "compare": "Comparar",
+    "empty": "Nenhuma entrega registrada."
+  },
+  "feedback": {
+    "delivered": "Etapa entregue. O orientador foi notificado.",
+    "undone": "Entrega desfeita. O artigo voltou à edição.",
+    "returned": "Artigo devolvido. A equipe foi notificada.",
+    "concluded": "Artigo concluído.",
+    "remarkCreated": "Apontamento registrado.",
+    "remarkUpdated": "Apontamento alterado.",
+    "remarkAddressed": "Apontamento marcado como corrigido.",
+    "remarkUnmarked": "Apontamento devolvido a aberto.",
+    "remarkDecided": "Decisão registrada.",
+    "replied": "Resposta publicada na discussão."
+  },
+  "errors": {
+    "SUBMISSION_ALREADY_MADE": "A etapa já foi entregue.",
+    "ARTICLE_LOCKED_FOR_REVIEW": "O artigo está em correção e não pode ser alterado.",
+    "ARTICLE_ALREADY_FINISHED": "O artigo já foi concluído.",
+    "MILESTONE_NOT_OPEN": "Não há etapa aberta no cronograma.",
+    "MILESTONE_DEADLINE_PASSED": "O prazo da etapa já venceu; a entrega não pode ser desfeita.",
+    "REVIEW_ALREADY_STARTED": "A correção já foi iniciada; a entrega não pode ser desfeita.",
+    "ARTICLE_NOT_IN_REVIEW": "O artigo não está em correção.",
+    "REMARK_ALREADY_CLOSED": "O apontamento já foi encerrado.",
+    "MILESTONE_PENDING": "Ainda há etapas pendentes no cronograma; conclua na correção da última etapa.",
+    "REMARK_PENDING": "Há apontamentos pendentes sem decisão. Valide, reabra ou dispense cada um antes de concluir.",
+    "PERMISSION_DENIED": "Você não tem permissão para esta ação.",
+    "RESOURCE_NOT_FOUND": "O conteúdo não foi encontrado ou está fora do seu alcance.",
+    "VALIDATION_FAILED": "Preencha o texto antes de salvar.",
+    "UNKNOWN": "Não foi possível concluir a ação. Tente novamente."
+  }
+}
