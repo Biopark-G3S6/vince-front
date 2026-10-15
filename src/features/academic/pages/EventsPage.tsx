@@ -1,13 +1,7 @@
 import { useMemo, useState } from 'react';
 
-import {
-  Button,
-  CalendarIcon,
-  ChartIcon,
-  DocumentIcon,
-  GraduationCapIcon,
-  PlusIcon,
-} from '@shared/ui';
+import { EventDirectory } from '@features/articles';
+import { CalendarIcon, ChartIcon, DocumentIcon, GraduationCapIcon, PlusIcon } from '@shared/ui';
 
 import {
   FilterChip,
@@ -50,16 +44,22 @@ export function EventsPage() {
   return (
     <PageScaffold
       actions={
-        <Button className="rounded-padrao px-7">
+        <a
+          className="inline-flex h-11 items-center gap-2 rounded-padrao bg-vince-primary px-7 text-base font-semibold text-white shadow-sm hover:bg-[#571424]"
+          href="/artigos/modelo"
+        >
           <PlusIcon className="h-5 w-5" />
           Novo evento
-        </Button>
+        </a>
       }
       activeSection="events"
+      personaRoles={['institutionAdmin', 'coordinator', 'advisor']}
       description="Gerencie eventos acadêmicos, congressos, simpósios, cronogramas e orientadores por escopo."
       eyebrow="Eventos Acadêmicos"
       title="Eventos Acadêmicos"
     >
+      <EventDirectory />
+
       <section className="mt-10 rounded-lg border border-vince-border bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-3">

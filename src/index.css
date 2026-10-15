@@ -74,3 +74,38 @@
     outline-offset: 3px;
   }
 }
+
+/* Cursor e identificação de quem edita o artigo ao mesmo tempo (RF-EDT-002). */
+@layer components {
+  .collaboration-carets__caret {
+    position: relative;
+    margin-right: -1px;
+    margin-left: -1px;
+    pointer-events: none;
+    border-right: 1px solid;
+    border-left: 1px solid;
+  }
+
+  .collaboration-carets__label {
+    position: absolute;
+    top: -1.4em;
+    left: -1px;
+    padding: 0.1rem 0.35rem;
+    font-family: Inter, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    font-style: normal;
+    line-height: normal;
+    text-indent: 0;
+    white-space: nowrap;
+    color: #ffffff;
+    border-radius: 0.25rem 0.25rem 0.25rem 0;
+    user-select: none;
+  }
+}
+
+@media print {
+  .print-hidden {
+    display: none !important;
+  }
+}

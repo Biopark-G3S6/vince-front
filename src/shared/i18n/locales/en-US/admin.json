@@ -1,0 +1,41 @@
+{
+  "breadcrumbRoot": "Admin",
+  "nav": {
+    "dashboard": "Dashboard",
+    "institutions": "Institutions",
+    "courses": "Courses",
+    "classes": "Classes",
+    "events": "Events",
+    "teams": "Teams",
+    "articles": "Articles",
+    "review": "Review Cycle",
+    "discussion": "Discussion and Notifications",
+    "notifications": "Notifications",
+    "assistance": "Assistance (AI)",
+    "progress": "Progress and Reports",
+    "language": "Internationalization",
+    "access": "Access",
+    "settings": "Settings",
+    "editor": "Article Editing",
+    "templates": "Article Template"
+  },
+  "shell": {
+    "tagline": "Academic Portal",
+    "menu": "Admin menu",
+    "expandMenu": "Expand menu",
+    "collapseMenu": "Collapse menu",
+    "search": "Search",
+    "searchPlaceholder": "Search...",
+    "notifications": "Notifications",
+    "language": "Interface language"
+  },
+  "roles": {
+    "advisor": "Advisor",
+    "student": "Student",
+    "coordinator": "Coordinator",
+    "institutionAdmin": "Administrator"
+  },
+  "persona": {
+    "label": "Demo perspective"
+  }
+}

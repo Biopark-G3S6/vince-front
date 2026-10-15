@@ -1,0 +1,36 @@
+{
+  "page": {
+    "eyebrow": "Idioma",
+    "title": "Idioma da Interface",
+    "description": "Escolha o idioma em que o portal é apresentado. Datas, números e fuso seguem o idioma escolhido."
+  },
+  "language": {
+    "title": "Idiomas disponíveis",
+    "current": "Em uso",
+    "default": "Padrão",
+    "preview": "Pré-visualização",
+    "previewHint": "Catálogo parcial, disponível apenas em desenvolvimento. O que não tiver tradução aparece no idioma padrão.",
+    "save": "Aplicar idioma",
+    "saved": "Idioma atualizado.",
+    "unchanged": "Este já é o idioma em uso."
+  },
+  "preview": {
+    "title": "Como os dados são apresentados",
+    "date": "Data",
+    "dateTime": "Data e hora",
+    "number": "Número",
+    "percent": "Percentual",
+    "relative": "Tempo relativo",
+    "timeZone": "Fuso de exibição"
+  },
+  "notes": {
+    "title": "O que a escolha alcança",
+    "interface": "A tradução alcança exclusivamente a interface e as mensagens do sistema.",
+    "content": "Conteúdo produzido por usuários — tema, artigo, apontamento, mensagem — permanece no idioma em que foi escrito.",
+    "persistence": "A preferência fica salva no seu perfil e vale nas próximas sessões. A troca não exige recarregar a página.",
+    "fallback": "Texto sem tradução no idioma escolhido é apresentado no idioma padrão."
+  },
+  "errors": {
+    "LANGUAGE_NOT_SUPPORTED": "Idioma não suportado."
+  }
+}

@@ -1,0 +1,205 @@
+/* Estilos do corpo do documento (ProseMirror). O preflight do Tailwind zera
+   títulos, listas e tabelas, então o aspecto de "página" é declarado aqui. */
+
+.article-page {
+  --page-height: 1123px;
+  box-sizing: border-box;
+  width: 794px;
+  min-height: var(--page-height);
+  padding: 72px;
+  background-color: #fff;
+  /* Linha sutil a cada página A4: orientação visual de paginação. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--page-height) - 1px),
+    #e3dede calc(var(--page-height) - 1px),
+    #e3dede var(--page-height)
+  );
+  font-family: var(--article-font);
+  font-size: var(--article-size);
+  line-height: var(--article-line);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+.article-body {
+  outline: none;
+  min-height: 600px;
+  word-wrap: break-word;
+}
+
+.article-body p {
+  margin: 0 0 0.9em;
+  text-align: var(--article-align);
+  min-height: 1em;
+}
+
+.article-body h1 {
+  margin: 0 0 0.5em;
+  font-size: 1.7em;
+  line-height: 1.25;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.article-body h2 {
+  margin: 1.6em 0 0.6em;
+  font-size: 1.15em;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6b1e2e;
+}
+
+.article-body h3 {
+  margin: 1.2em 0 0.5em;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: #6b1e2e;
+}
+
+.article-body ul,
+.article-body ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.6em;
+}
+.article-body ul {
+  list-style: disc;
+}
+.article-body ol {
+  list-style: decimal;
+}
+.article-body li > p {
+  margin: 0;
+}
+
+.article-body blockquote {
+  margin: 0 0 0.9em;
+  padding-left: 1em;
+  border-left: 3px solid #d9b5bd;
+  color: #5f4e52;
+  font-style: italic;
+}
+
+.article-body pre {
+  margin: 0 0 0.9em;
+  padding: 0.75em 1em;
+  border-radius: 6px;
+  background: #f4f0f0;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}
+.article-body code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: #f4f0f0;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.9em;
+}
+.article-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.article-body hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid #d8cfd1;
+}
+
+.article-body a {
+  color: #8b2d3f;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.article-body mark {
+  background: #ffe58a;
+}
+
+.article-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.5em 0;
+}
+.article-body img.ProseMirror-selectednode {
+  outline: 2px solid #8b2d3f;
+}
+
+.article-body table {
+  width: 100%;
+  margin: 0 0 0.9em;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.article-body th,
+.article-body td {
+  position: relative;
+  min-width: 1em;
+  padding: 4px 8px;
+  border: 1px solid #b9a9ad;
+  vertical-align: top;
+}
+.article-body th {
+  background: #f4e9eb;
+  font-weight: 700;
+  text-align: left;
+}
+.article-body .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(139 45 63 / 0.15);
+  pointer-events: none;
+}
+.article-body .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  background: #8b2d3f;
+  pointer-events: none;
+}
+.article-body .tableWrapper {
+  overflow-x: auto;
+}
+.resize-cursor {
+  cursor: col-resize;
+}
+
+.article-body p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: #b3a5a8;
+  pointer-events: none;
+}
+
+@page {
+  size: A4;
+  margin: 20mm;
+}
+
+@media print {
+  .article-page {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    zoom: 1 !important;
+  }
+}
+
+/* Citação vinculada a uma referência registrada (RF-EDT-004). */
+.article-body .citation {
+  padding: 0 0.1em;
+  border-radius: 0.2em;
+  background: var(--color-vince-tertiary);
+}
+
+.article-body .citation.ProseMirror-selectednode {
+  outline: 2px solid var(--color-vince-secondary);
+}
