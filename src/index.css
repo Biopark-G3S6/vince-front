@@ -42,11 +42,6 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  html {
-    /* Sem rolagem horizontal do corpo em nenhuma largura. */
-    overflow-x: hidden;
-  }
-
   body {
     min-width: 320px;
     min-height: 100vh;

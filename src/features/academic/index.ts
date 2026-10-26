@@ -3,4 +3,5 @@ export { ArticlesPage } from './pages/ArticlesPage';
 export { ClassesPage } from './pages/ClassesPage';
 export { CoursesPage } from './pages/CoursesPage';
 export { EventsPage } from './pages/EventsPage';
+export { PeoplePage } from './pages/PeoplePage';
 export { TeamsPage } from './pages/TeamsPage';

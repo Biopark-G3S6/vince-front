@@ -18,6 +18,7 @@ import { useAdvisorTeams, useCourseEvents } from '../api/hooks';
 import type { CourseEvent, TeamWithSignals } from '../model/progress';
 
 import { TeamsTable } from './TeamsTable';
+import { QueryFeedback } from './QueryFeedback';
 
 type Filter = 'all' | 'withSignal' | 'notDelivered';
 type Sort = 'signals' | 'lastEdit' | 'deadline' | 'name';
@@ -29,12 +30,19 @@ const sorts: Sort[] = ['signals', 'lastEdit', 'deadline', 'name'];
 export function AdvisorTeamsPanel() {
   const { t } = useTranslation('progress');
   const { compareText, formatNumber } = useFormatters();
-  const { data: teams } = useAdvisorTeams();
+  const { data: teams, error, refetch } = useAdvisorTeams();
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('signals');
 
   if (!teams) {
-    return null;
+    return (
+      <QueryFeedback
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (teams.length === 0) {
@@ -62,7 +70,7 @@ export function AdvisorTeamsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MetricCard label={t('metrics.teams')} value={formatNumber(teams.length)} />
         <MetricCard
           label={t('metrics.withSignal')}
@@ -79,7 +87,7 @@ export function AdvisorTeamsPanel() {
         />
       </div>
 
-      <section className="rounded-lg border border-vince-border bg-white shadow-sm">
+      <section className="min-w-0 rounded-lg border border-vince-border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-vince-border px-4 py-4">
           <div className="flex flex-wrap gap-2">
             {filters.map((key) => (
@@ -88,10 +96,10 @@ export function AdvisorTeamsPanel() {
               </FilterChip>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-sm font-semibold text-vince-muted">
+          <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-vince-muted">
             {t('sort.label')}
             <select
-              className="h-10 rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
+              className="h-10 max-w-full rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
               onChange={(event) => setSort(event.target.value as Sort)}
               value={sort}
             >
@@ -114,10 +122,17 @@ export function AdvisorTeamsPanel() {
 /** RF-ACP-002 — Eventos do curso e as suas equipes, para o coordenador. */
 export function CoursePanel() {
   const { t } = useTranslation('progress');
-  const { data: events } = useCourseEvents();
+  const { data: events, error, refetch } = useCourseEvents();
 
   if (!events) {
-    return null;
+    return (
+      <QueryFeedback
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (events.length === 0) {
@@ -155,6 +170,7 @@ function EventCard({ event }: { event: CourseEvent }) {
     <SectionPanel
       actions={
         <Button
+          aria-controls={`course-teams-${event.id}`}
           aria-expanded={open}
           onClick={() => setOpen((current) => !current)}
           size="sm"
@@ -191,7 +207,10 @@ function EventCard({ event }: { event: CourseEvent }) {
       </ol>
 
       {open && (
-        <div className="-mx-6 -mb-6 mt-6 border-t border-vince-border">
+        <div
+          className="-mx-4 -mb-4 mt-6 border-t border-vince-border sm:-mx-6 sm:-mb-6"
+          id={`course-teams-${event.id}`}
+        >
           <TeamsTable links={['article']} showAdvisor teams={event.teams} />
         </div>
       )}

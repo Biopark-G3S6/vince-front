@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { useEditorState, type Editor } from '@tiptap/react';
 
 import { cn } from '@shared/lib/cn';
@@ -26,6 +28,7 @@ export function StructureSidebar({
   onOpenHelp: () => void;
   settingsMenu: React.ReactNode;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const { headings, activePos } = useEditorState({
     editor,
     selector: ({ editor: e }) => {
@@ -78,26 +81,44 @@ export function StructureSidebar({
   }
 
   return (
-    <aside className="flex w-[212px] shrink-0 flex-col border-r border-vince-border bg-[#faf6f6] print:hidden">
+    <aside className="flex w-full shrink-0 flex-col border-b border-vince-border bg-[#faf6f6] lg:w-[212px] lg:border-b-0 lg:border-r print:hidden">
       <div className="px-3 pb-3 pt-5">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <EditorIcon className="h-4 w-4" name="list" /> Structure
+        <h2 className="hidden items-center gap-2 text-sm font-semibold lg:flex">
+          <EditorIcon className="h-4 w-4" name="list" /> Estrutura
         </h2>
-        <p className="mt-1 text-[10px] text-vince-muted">Manuscript v1.2</p>
+        <button
+          aria-expanded={expanded}
+          aria-controls="article-structure"
+          className="flex min-h-11 w-full items-center justify-between gap-2 rounded px-2 text-sm font-semibold text-vince-primary hover:bg-vince-tertiary lg:hidden"
+          onClick={() => setExpanded((value) => !value)}
+          type="button"
+        >
+          <span className="flex items-center gap-2">
+            <EditorIcon className="h-4 w-4" name="list" /> Estrutura do artigo
+          </span>
+          <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+        </button>
         {editor.isEditable && (
           <button
-            className="mt-3 h-7 w-full rounded border border-vince-primary bg-white text-[11px] font-medium text-vince-primary hover:bg-vince-tertiary"
+            className={cn(
+              'mt-3 min-h-11 w-full rounded border border-vince-primary bg-white px-3 py-2 text-sm font-medium text-vince-primary hover:bg-vince-tertiary lg:block',
+              !expanded && 'hidden',
+            )}
             onClick={addSection}
             type="button"
           >
-            + Add Section
+            + Adicionar seção
           </button>
         )}
       </div>
 
       <nav
         aria-label="Estrutura do artigo"
-        className="min-h-0 flex-1 overflow-y-auto border-t border-vince-border py-3"
+        id="article-structure"
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto border-t border-vince-border py-3 lg:block',
+          !expanded && 'hidden',
+        )}
       >
         {headings.length === 0 && (
           <p className="px-3 text-[11px] text-vince-muted">
@@ -107,7 +128,7 @@ export function StructureSidebar({
         {headings.map((h) => (
           <button
             className={cn(
-              'flex min-h-[26px] w-full items-center gap-3 px-3 text-left text-[11px] text-vince-muted hover:bg-vince-tertiary',
+              'flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm text-vince-muted hover:bg-vince-tertiary',
               h.level === 3 && 'pl-6',
               activePos === h.pos &&
                 'border-l-2 border-vince-primary bg-[#fadde3] font-medium text-vince-primary',
@@ -122,24 +143,29 @@ export function StructureSidebar({
         ))}
       </nav>
 
-      <div className="space-y-1 border-t border-vince-border px-2 py-3 text-[11px] text-vince-muted">
+      <div
+        className={cn(
+          'space-y-1 border-t border-vince-border px-2 py-3 text-sm text-vince-muted lg:block',
+          !expanded && 'hidden',
+        )}
+      >
         <Menu>
           <MenuTrigger asChild>
             <button
-              className="flex w-full items-center gap-3 rounded px-2 py-1.5 hover:bg-vince-tertiary"
+              className="flex min-h-11 w-full items-center gap-3 rounded px-2 py-2 hover:bg-vince-tertiary"
               type="button"
             >
-              <EditorIcon className="h-4 w-4" name="settings" /> Settings
+              <EditorIcon className="h-4 w-4" name="settings" /> Configurações
             </button>
           </MenuTrigger>
           <MenuContent>{settingsMenu}</MenuContent>
         </Menu>
         <button
-          className="flex w-full items-center gap-3 rounded px-2 py-1.5 hover:bg-vince-tertiary"
+          className="flex min-h-11 w-full items-center gap-3 rounded px-2 py-2 hover:bg-vince-tertiary"
           onClick={onOpenHelp}
           type="button"
         >
-          <EditorIcon className="h-4 w-4" name="help" /> Help
+          <EditorIcon className="h-4 w-4" name="help" /> Ajuda
         </button>
       </div>
     </aside>

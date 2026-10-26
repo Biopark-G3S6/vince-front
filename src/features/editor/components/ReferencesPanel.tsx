@@ -73,7 +73,7 @@ export function ReferencesPanel({ editable, editor, references }: ReferencesPane
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4 [&_button]:min-h-11">
       <p className="text-sm leading-6 text-vince-muted">{t('references.intro')}</p>
 
       {editable && (
@@ -98,7 +98,7 @@ export function ReferencesPanel({ editable, editor, references }: ReferencesPane
 
           return (
             <li className="rounded-lg border border-vince-border bg-white p-3" key={reference.id}>
-              <p className="text-sm leading-6 text-vince-text">
+              <p className="break-words text-sm leading-6 text-vince-text [overflow-wrap:anywhere]">
                 {formatReference(reference).map((segment, index) =>
                   segment.emphasis ? (
                     <strong key={index}>{segment.text}</strong>
@@ -128,7 +128,7 @@ export function ReferencesPanel({ editable, editor, references }: ReferencesPane
                     </span>
                     <input
                       autoFocus
-                      className="h-9 w-full rounded-padrao border border-vince-border px-2 text-sm focus:border-vince-primary"
+                      className="h-11 min-w-0 w-full rounded-padrao border border-vince-border px-3 text-base focus:border-vince-primary"
                       onChange={(event) => setCiting({ ...citing, page: event.target.value })}
                       value={citing.page}
                     />
@@ -142,7 +142,7 @@ export function ReferencesPanel({ editable, editor, references }: ReferencesPane
                     />
                     {t('references.direct')}
                   </label>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <Button onClick={() => setCiting(null)} size="sm" variant="ghost">
                       {t('common.cancel')}
                     </Button>
@@ -203,7 +203,7 @@ export function ReferencesPanel({ editable, editor, references }: ReferencesPane
 }
 
 const inputClass =
-  'h-9 w-full rounded-padrao border border-vince-border px-2 text-sm text-vince-text focus:border-vince-primary';
+  'h-11 min-w-0 w-full rounded-padrao border border-vince-border px-3 text-base text-vince-text focus:border-vince-primary';
 
 function ReferenceForm({ draft, onClose }: { draft: Draft; onClose: () => void }) {
   const { t } = useTranslation('editor');
@@ -243,7 +243,7 @@ function ReferenceForm({ draft, onClose }: { draft: Draft; onClose: () => void }
   }
 
   return (
-    <form className="space-y-3" onSubmit={handleSubmit}>
+    <form className="min-w-0 space-y-4 [&_button]:min-h-11" onSubmit={handleSubmit}>
       <h3 className="font-extrabold text-vince-text">
         {draft.id ? t('references.editTitle') : t('references.addTitle')}
       </h3>
@@ -254,7 +254,7 @@ function ReferenceForm({ draft, onClose }: { draft: Draft; onClose: () => void }
             <span className="mb-1 block text-xs font-semibold text-vince-muted">
               {t('references.byDoi')}
             </span>
-            <span className="flex gap-2">
+            <span className="flex min-w-0 flex-wrap gap-2">
               <input
                 className={inputClass}
                 onChange={(event) => setDoi(event.target.value)}
@@ -276,7 +276,7 @@ function ReferenceForm({ draft, onClose }: { draft: Draft; onClose: () => void }
               {t('references.byPaste')}
             </span>
             <textarea
-              className="min-h-16 w-full rounded-padrao border border-vince-border p-2 text-sm focus:border-vince-primary"
+              className="min-h-24 w-full rounded-padrao border border-vince-border p-3 text-base focus:border-vince-primary"
               onChange={(event) => setPasted(event.target.value)}
               value={pasted}
             />
@@ -331,7 +331,7 @@ function ReferenceForm({ draft, onClose }: { draft: Draft; onClose: () => void }
             {field === 'authors' ? (
               <textarea
                 aria-invalid={flagged}
-                className="min-h-16 w-full rounded-padrao border border-vince-border p-2 text-sm focus:border-vince-primary"
+                className="min-h-24 w-full rounded-padrao border border-vince-border p-3 text-base focus:border-vince-primary"
                 onChange={(event) =>
                   setData({
                     ...data,
@@ -353,7 +353,7 @@ function ReferenceForm({ draft, onClose }: { draft: Draft; onClose: () => void }
         );
       })}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <Button onClick={onClose} size="sm" variant="ghost">
           {t('common.cancel')}
         </Button>

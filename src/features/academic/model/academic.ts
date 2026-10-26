@@ -64,6 +64,15 @@ export type AcademicEvent = {
   title: string;
 };
 
+export type EventEvaluator = {
+  email: string;
+  eventId: string;
+  expertise: string;
+  id: string;
+  name: string;
+  status: 'active' | 'invited';
+};
+
 export type TeamMember = {
   course: string;
   name: string;
@@ -243,6 +252,25 @@ export const academicEvents: AcademicEvent[] = [
     teams: 22,
     theme: 'Direitos constitucionais na era da inteligência artificial.',
     title: 'Jornada Jurídica Anual',
+  },
+];
+
+export const eventEvaluators: EventEvaluator[] = [
+  {
+    email: 'helena.torres@frt.edu.br',
+    eventId: 'event-congresso-2026',
+    expertise: 'Metodologia científica',
+    id: 'evaluator-helena',
+    name: 'Dra. Helena Torres',
+    status: 'active',
+  },
+  {
+    email: 'gustavo.lima@frt.edu.br',
+    eventId: 'event-bio-2026',
+    expertise: 'Bioética',
+    id: 'evaluator-gustavo',
+    name: 'Prof. Gustavo Lima',
+    status: 'invited',
   },
 ];
 

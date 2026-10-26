@@ -9,11 +9,13 @@ import { Button, ChartIcon, DownloadIcon, EmptyState, Notice, SectionPanel } fro
 
 import { useGenerateReport, useReportCourses } from '../api/hooks';
 import { isEmptyReport, reportPeriods, toCsv, type CourseReport } from '../model/progress';
+import { QueryFeedback } from './QueryFeedback';
 
 /** RF-ACP-005 e RF-ACP-006 — Relatório de produção do curso e a sua exportação. */
 export function ReportPanel() {
   const { t } = useTranslation('progress');
-  const { data: courses = [] } = useReportCourses();
+  const coursesQuery = useReportCourses();
+  const courses = coursesQuery.data ?? [];
   const generate = useGenerateReport();
   const [selectedCourse, setSelectedCourse] = useState<string>();
   const [period, setPeriod] = useState(reportPeriods[0]!);
@@ -35,19 +37,40 @@ export function ReportPanel() {
     }
   }
 
+  if (!coursesQuery.data)
+    return (
+      <QueryFeedback
+        error={coursesQuery.error}
+        onRetry={() => {
+          void coursesQuery.refetch();
+        }}
+      />
+    );
+  if (courses.length === 0)
+    return (
+      <EmptyState
+        title={t('report.noCourses', {
+          defaultValue: 'Nenhum curso disponível para gerar relatórios.',
+        })}
+      />
+    );
+
   return (
     <div className="space-y-6">
       <form
         className="flex flex-wrap items-end gap-4 rounded-lg border border-vince-border bg-white p-5 shadow-sm print:hidden"
         onSubmit={handleSubmit}
       >
-        <label className="block">
+        <label className="block min-w-0 flex-1 sm:flex-none">
           <span className="mb-1 block text-sm font-semibold text-vince-muted">
             {t('report.course')}
           </span>
           <select
-            className="h-11 min-w-56 rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
-            onChange={(event) => setSelectedCourse(event.target.value)}
+            className="h-11 w-full min-w-0 rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary sm:w-64"
+            onChange={(event) => {
+              setSelectedCourse(event.target.value);
+              generate.reset();
+            }}
             value={courseId}
           >
             {courses.map((course) => (
@@ -57,13 +80,16 @@ export function ReportPanel() {
             ))}
           </select>
         </label>
-        <label className="block">
+        <label className="block min-w-0">
           <span className="mb-1 block text-sm font-semibold text-vince-muted">
             {t('report.period')}
           </span>
           <select
             className="h-11 rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
-            onChange={(event) => setPeriod(event.target.value)}
+            onChange={(event) => {
+              setPeriod(event.target.value);
+              generate.reset();
+            }}
             value={period}
           >
             {reportPeriods.map((option) => (
@@ -174,32 +200,40 @@ function ReportView({ report }: { report: CourseReport }) {
 
           <div className="grid gap-6 xl:grid-cols-2">
             <SectionPanel title={t('report.teamsByEvent')}>
-              <table className="w-full text-left">
-                <thead className="text-sm text-vince-muted">
-                  <tr>
-                    <th className="pb-2 font-semibold">{t('report.event')}</th>
-                    <th className="pb-2 text-right font-semibold">{t('report.teams')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-vince-border">
-                  {report.events.map((event) => (
-                    <tr key={event.name}>
-                      <td className="py-3 text-vince-text">{event.name}</td>
-                      <td className="py-3 text-right font-bold text-vince-text">
-                        {formatNumber(event.teams)}
+              <div
+                aria-label={t('report.teamsByEvent')}
+                className="overflow-x-auto"
+                role="region"
+                tabIndex={0}
+              >
+                <table className="w-full text-left">
+                  <caption className="sr-only">{t('report.teamsByEvent')}</caption>
+                  <thead className="text-sm text-vince-muted">
+                    <tr>
+                      <th className="pb-2 font-semibold">{t('report.event')}</th>
+                      <th className="pb-2 text-right font-semibold">{t('report.teams')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-vince-border">
+                    {report.events.map((event) => (
+                      <tr key={event.name}>
+                        <td className="py-3 text-vince-text">{event.name}</td>
+                        <td className="py-3 text-right font-bold text-vince-text">
+                          {formatNumber(event.teams)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-vince-border">
+                    <tr>
+                      <td className="pt-3 font-bold text-vince-text">{t('report.total')}</td>
+                      <td className="pt-3 text-right font-black text-vince-primary">
+                        {formatNumber(totalTeams)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-vince-border">
-                  <tr>
-                    <td className="pt-3 font-bold text-vince-text">{t('report.total')}</td>
-                    <td className="pt-3 text-right font-black text-vince-primary">
-                      {formatNumber(totalTeams)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
             </SectionPanel>
 
             <SectionPanel title={t('report.lagging')}>
@@ -207,24 +241,32 @@ function ReportView({ report }: { report: CourseReport }) {
               {report.lagging.length === 0 ? (
                 <p className="text-vince-muted">{t('report.laggingNone')}</p>
               ) : (
-                <table className="w-full text-left">
-                  <thead className="text-sm text-vince-muted">
-                    <tr>
-                      <th className="pb-2 font-semibold">{t('report.team')}</th>
-                      <th className="pb-2 font-semibold">{t('report.event')}</th>
-                      <th className="pb-2 font-semibold">{t('report.milestone')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-vince-border">
-                    {report.lagging.map((item) => (
-                      <tr key={item.team}>
-                        <td className="py-3 font-semibold text-vince-text">{item.team}</td>
-                        <td className="py-3 text-vince-text">{item.event}</td>
-                        <td className="py-3 text-vince-text">{item.milestone}</td>
+                <div
+                  aria-label={t('report.lagging')}
+                  className="overflow-x-auto"
+                  role="region"
+                  tabIndex={0}
+                >
+                  <table className="w-full min-w-[400px] text-left">
+                    <caption className="sr-only">{t('report.lagging')}</caption>
+                    <thead className="text-sm text-vince-muted">
+                      <tr>
+                        <th className="pb-2 font-semibold">{t('report.team')}</th>
+                        <th className="pb-2 font-semibold">{t('report.event')}</th>
+                        <th className="pb-2 font-semibold">{t('report.milestone')}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-vince-border">
+                      {report.lagging.map((item) => (
+                        <tr key={item.team}>
+                          <td className="py-3 font-semibold text-vince-text">{item.team}</td>
+                          <td className="py-3 text-vince-text">{item.event}</td>
+                          <td className="py-3 text-vince-text">{item.milestone}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </SectionPanel>
           </div>

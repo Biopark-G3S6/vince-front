@@ -47,6 +47,7 @@ export function ProgressPage() {
             aria-labelledby={`progress-tab-${tab}`}
             className="pt-6"
             id={`progress-panel-${tab}`}
+            key={`${user.id}-${tab}`}
             role="tabpanel"
           >
             <p className="mb-6 text-sm text-vince-muted">{t('page.readOnly')}</p>

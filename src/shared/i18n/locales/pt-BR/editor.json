@@ -1,7 +1,7 @@
 {
   "page": {
     "noAccessTitle": "Artigo fora do seu alcance",
-    "noAccessBody": "O artigo é alcançado pela equipe, pelo orientador do evento e pelo coordenador do curso."
+    "noAccessBody": "O acesso depende do vínculo com o artigo. Testes e TCCs independentes ficam sob a gestão do professor responsável."
   },
   "common": {
     "cancel": "Cancelar",

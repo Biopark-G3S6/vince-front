@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 
-import { useCurrentUser, useSetRole } from '@features/admin';
+import { useCurrentUser } from '@features/admin';
 import { getErrorCode } from '@shared/api/apiError';
 import { Button, Notice } from '@shared/ui';
 
@@ -12,8 +12,7 @@ import { articleHref } from '../api/registryApi';
 import { students } from '../model/article';
 
 const errorMessage: Record<string, string> = {
-  ADVISOR_NOT_ASSIGNED_TO_EVENT:
-    'Só o orientador do evento cria equipes nele. Troque a perspectiva para Orientador.',
+  ADVISOR_NOT_ASSIGNED_TO_EVENT: 'Só um professor vinculado ao evento pode criar equipes nele.',
   EVENT_TEAM_LIMIT_REACHED: 'O evento já atingiu o limite de equipes.',
   VALIDATION_FAILED: 'Informe o nome da equipe, o título do artigo e ao menos um integrante.',
 };
@@ -32,7 +31,6 @@ type CreateTeamDialogProps = {
  */
 export function CreateTeamDialog({ onOpenChange, open }: CreateTeamDialogProps) {
   const user = useCurrentUser();
-  const setRole = useSetRole();
   const directory = useEventDirectory();
   const createTeam = useCreateTeam();
   const events = directory.data?.events ?? [];
@@ -82,14 +80,7 @@ export function CreateTeamDialog({ onOpenChange, open }: CreateTeamDialogProps) 
 
           {user.role !== 'advisor' && (
             <Notice className="mt-5" tone="warning">
-              Só o orientador do evento cria equipes nele.{' '}
-              <button
-                className="font-bold underline"
-                onClick={() => setRole('advisor')}
-                type="button"
-              >
-                Continuar como Orientador
-              </button>
+              Só um professor vinculado ao evento pode criar equipes nele.
             </Notice>
           )}
 

@@ -1,4 +1,5 @@
 import { articleHref, useArticles } from '@features/articles';
+import { canAccessSection, useCurrentUser } from '@features/admin';
 import { useFormatters } from '@shared/i18n';
 import { EmptyState, SectionPanel, StatusBadge, type BadgeTone } from '@shared/ui';
 
@@ -6,17 +7,17 @@ import { readCycleOf } from '../api/reviewApi';
 import { findMilestone, isPending, type ArticleStatus } from '../model/review';
 
 const statusView: Record<ArticleStatus, { label: string; tone: BadgeTone }> = {
-  FINISHED: { label: 'Finished', tone: 'success' },
-  IN_PROGRESS: { label: 'In Progress', tone: 'warning' },
-  IN_REVIEW: { label: 'In Review', tone: 'primary' },
-  STARTED: { label: 'Started', tone: 'muted' },
+  FINISHED: { label: 'Finalizado', tone: 'success' },
+  IN_PROGRESS: { label: 'Em desenvolvimento', tone: 'warning' },
+  IN_REVIEW: { label: 'Em revisão', tone: 'primary' },
+  STARTED: { label: 'Iniciado', tone: 'muted' },
 };
 
 const destinations = [
-  { label: 'Abrir no editor', path: '/artigos/editor' },
-  { label: 'Correção', path: '/admin/correcao' },
-  { label: 'Discussão', path: '/admin/discussao' },
-];
+  { label: 'Abrir no editor', path: '/artigos/editor', section: 'editor' },
+  { label: 'Correção', path: '/admin/correcao', section: 'review' },
+  { label: 'Discussão', path: '/admin/discussao', section: 'discussion' },
+] as const;
 
 /**
  * Artigos das equipes cadastradas, com a situação de cada um. É daqui que se abre um
@@ -24,12 +25,16 @@ const destinations = [
  */
 export function ArticleList({ title }: { title: string }) {
   const { formatDate } = useFormatters();
+  const user = useCurrentUser();
   const { data: articles = [] } = useArticles();
 
   return (
     <SectionPanel className="mt-8" title={title}>
       {articles.length === 0 ? (
-        <EmptyState title="Nenhuma equipe criada ainda." />
+        <EmptyState
+          title="Nenhum artigo disponível ainda."
+          description="Escolha um modelo para iniciar sua produção ou inscreva-se em um evento."
+        />
       ) : (
         <ul className="divide-y divide-vince-border">
           {articles.map((article) => {
@@ -61,19 +66,21 @@ export function ArticleList({ title }: { title: string }) {
                   <p>{cycle.remarks.filter(isPending).length} apontamentos pendentes</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {destinations.map((destination, index) => (
-                    <a
-                      className={
-                        index === 0
-                          ? 'inline-flex h-9 items-center rounded-padrao bg-vince-primary px-3 text-sm font-semibold text-white hover:bg-[#571424]'
-                          : 'inline-flex h-9 items-center rounded-padrao border border-vince-border px-3 text-sm font-semibold text-vince-primary hover:bg-vince-tertiary'
-                      }
-                      href={articleHref(destination.path, article.id)}
-                      key={destination.path}
-                    >
-                      {destination.label}
-                    </a>
-                  ))}
+                  {destinations
+                    .filter((destination) => canAccessSection(user.role, destination.section))
+                    .map((destination, index) => (
+                      <a
+                        className={
+                          index === 0
+                            ? 'inline-flex h-9 items-center rounded-padrao bg-vince-primary px-3 text-sm font-semibold text-white hover:bg-[#571424]'
+                            : 'inline-flex h-9 items-center rounded-padrao border border-vince-border px-3 text-sm font-semibold text-vince-primary hover:bg-vince-tertiary'
+                        }
+                        href={articleHref(destination.path, article.id)}
+                        key={destination.path}
+                      >
+                        {destination.label}
+                      </a>
+                    ))}
                 </div>
               </li>
             );

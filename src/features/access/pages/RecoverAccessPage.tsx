@@ -25,7 +25,7 @@ export function RecoverAccessPage() {
           </span>
           <h1 className="mt-5 text-3xl font-extrabold">Recuperar acesso</h1>
           <p className="mt-3 text-lg leading-7 text-vince-muted">
-            Informe seu e-mail para receber o meio de redefinição com prazo de validade.
+            Experimente a recuperação de acesso. Nesta demonstração, nenhum e-mail é enviado.
           </p>
         </div>
 
@@ -57,10 +57,13 @@ export function RecoverAccessPage() {
           </button>
 
           {sent && (
-            <div className="rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-900">
+            <div
+              role="status"
+              className="rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-900"
+            >
               <p className="flex items-start gap-2">
                 <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                Se houver uma conta para esse e-mail, as instruções serão enviadas.
+                Solicitação de demonstração registrada. Você pode experimentar a definição de senha.
               </p>
               <a
                 className="mt-3 inline-flex font-bold text-green-900 underline"

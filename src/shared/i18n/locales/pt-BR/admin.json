@@ -1,11 +1,13 @@
 {
   "breadcrumbRoot": "Admin",
+  "breadcrumbLabel": "Caminho de navegação",
   "nav": {
     "dashboard": "Dashboard",
     "institutions": "Instituições",
     "courses": "Cursos",
     "classes": "Turmas",
     "events": "Eventos",
+    "people": "Professores e alunos",
     "teams": "Equipes",
     "articles": "Artigos",
     "review": "Ciclo de Correção",
@@ -17,11 +19,35 @@
     "access": "Acesso",
     "settings": "Configurações",
     "editor": "Edição de Artigo",
-    "templates": "Template de Artigo"
+    "templates": "Modelos de artigo"
+  },
+  "roleNav": {
+    "advisor": {
+      "dashboard": "Visão do professor",
+      "teams": "Minhas equipes",
+      "articles": "Artigos orientados",
+      "events": "Eventos e TCCs",
+      "review": "Correções",
+      "discussion": "Discussões"
+    },
+    "student": {
+      "dashboard": "Minha jornada",
+      "articles": "Meus artigos",
+      "events": "Eventos e inscrições",
+      "review": "Minhas correções",
+      "discussion": "Minha equipe"
+    },
+    "coordinator": {
+      "dashboard": "Visão da coordenação",
+      "people": "Professores e alunos",
+      "events": "Eventos e avaliadores"
+    }
   },
   "shell": {
     "tagline": "Academic Portal",
     "menu": "Menu administrativo",
+    "skipToContent": "Pular para o conteúdo",
+    "noResults": "Nenhuma tela encontrada.",
     "expandMenu": "Expandir menu",
     "collapseMenu": "Recolher menu",
     "search": "Buscar",
@@ -30,13 +56,14 @@
     "language": "Idioma da interface"
   },
   "roles": {
-    "advisor": "Orientador",
+    "advisor": "Professor",
     "student": "Aluno",
     "coordinator": "Coordenador",
     "institutionAdmin": "Administrador"
   },
   "persona": {
     "label": "Perspectiva de demonstração",
-    "reset": "Restaurar dados de demonstração"
+    "reset": "Restaurar dados de demonstração",
+    "connectedAs": "Perfil conectado: {{role}}"
   }
 }

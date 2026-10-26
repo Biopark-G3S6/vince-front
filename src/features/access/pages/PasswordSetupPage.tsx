@@ -33,6 +33,7 @@ export function PasswordSetupPage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canSubmit) return;
     setSaved(true);
   }
 
@@ -44,7 +45,7 @@ export function PasswordSetupPage() {
           'linear-gradient(90deg, rgb(255 255 255 / 0.84), rgb(255 255 255 / 0.68)), url("/assets/landing-library-hero.png")',
       }}
     >
-      <section className="w-full max-w-[520px] rounded-lg border border-white/70 bg-white px-12 py-12 shadow-[0_24px_80px_rgb(57_38_43/0.16)]">
+      <section className="w-full max-w-[520px] rounded-lg border border-white/70 bg-white px-5 py-8 shadow-[0_24px_80px_rgb(57_38_43/0.16)] sm:px-10 sm:py-12">
         <BrandMark align="center" className="mb-10" />
         <div className="text-center">
           <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-vince-tertiary text-vince-primary">
@@ -52,7 +53,7 @@ export function PasswordSetupPage() {
           </span>
           <h1 className="mt-5 text-3xl font-extrabold text-vince-text">Definir senha</h1>
           <p className="mt-3 text-vince-muted">
-            Crie uma nova senha para concluir o acesso. As demais sessões serão encerradas.
+            Experimente a definição de senha no ambiente de demonstração.
           </p>
         </div>
 
@@ -60,6 +61,8 @@ export function PasswordSetupPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-vince-muted">Nova senha</span>
             <input
+              autoComplete="new-password"
+              minLength={10}
               className="h-12 w-full rounded-padrao border border-vince-border px-4 text-lg text-vince-text focus:border-vince-primary"
               onChange={(event) => {
                 setPassword(event.target.value);
@@ -75,6 +78,7 @@ export function PasswordSetupPage() {
               Confirmar senha
             </span>
             <input
+              autoComplete="new-password"
               className="h-12 w-full rounded-padrao border border-vince-border px-4 text-lg text-vince-text focus:border-vince-primary"
               onChange={(event) => {
                 setConfirmation(event.target.value);
@@ -112,10 +116,19 @@ export function PasswordSetupPage() {
           </button>
 
           {saved && (
-            <p className="rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
-              Senha definida com sucesso. A próxima entrada exigirá a nova senha.
+            <p
+              role="status"
+              className="rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800"
+            >
+              Senha validada nesta demonstração. A conta de demonstração mantém a senha vince123.
             </p>
           )}
+          <a
+            className="block py-2 text-center font-semibold text-vince-primary hover:underline"
+            href="/entrar"
+          >
+            Voltar para o login
+          </a>
         </form>
       </section>
     </main>

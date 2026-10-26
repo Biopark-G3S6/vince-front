@@ -14,7 +14,19 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'docs/**', 'coverage/**', 'src/app/routeTree.gen.ts'] },
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      '.pnpm-store/**',
+      'docs/**',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+      'tmp/**',
+      'src/app/routeTree.gen.ts',
+    ],
+  },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,

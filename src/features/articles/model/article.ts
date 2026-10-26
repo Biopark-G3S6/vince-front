@@ -20,6 +20,9 @@ export type ArticleMilestone = {
  */
 export type Article = {
   advisor: TeamMember;
+  ownerId?: string;
+  templateId?: string | null;
+  templateVersion?: number | null;
   createdAt: string;
   event: string;
   eventId: string;

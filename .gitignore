@@ -1,5 +1,6 @@
 # Dependências e build
 /node_modules
+/.pnpm-store
 /dist
 /dist-ssr
 /build
@@ -10,6 +11,7 @@
 /playwright-report
 /blob-report
 /playwright/.cache
+/tmp
 
 # Variáveis de ambiente — .env.example é versionado
 .env*

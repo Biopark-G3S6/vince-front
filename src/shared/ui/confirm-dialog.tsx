@@ -32,13 +32,13 @@ export function ConfirmDialog({
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[#24151a]/45 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-8 shadow-2xl">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92dvh] w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-5 shadow-2xl sm:p-8">
           <Dialog.Title className="text-2xl font-extrabold text-vince-text">{title}</Dialog.Title>
           <Dialog.Description className="mt-2 leading-7 text-vince-muted">
             {description}
           </Dialog.Description>
           {children && <div className="mt-4">{children}</div>}
-          <div className="mt-8 flex justify-end gap-3">
+          <div className="mt-8 flex flex-wrap justify-end gap-3">
             <Dialog.Close asChild>
               <Button variant="outline">{cancelLabel}</Button>
             </Dialog.Close>

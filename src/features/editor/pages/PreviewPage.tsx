@@ -4,7 +4,6 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { PersonaSwitch } from '@features/admin';
 import { currentArticle } from '@features/articles';
 import { useFormatters } from '@shared/i18n';
 import { downloadBlob } from '@shared/lib/download';
@@ -99,7 +98,7 @@ export function PreviewPage() {
   // A exportação segue a norma, qualquer que seja a configuração de página do rascunho.
   const { bottom, left, right, top } = abntNorm.margins;
   const sheetClass =
-    'mx-auto mb-8 min-h-[29.7cm] w-[21cm] max-w-full bg-white shadow-xl print:mb-0 print:min-h-0 print:w-auto print:break-after-page print:shadow-none';
+    'preview-sheet mx-auto mb-6 min-h-[29.7cm] w-[21cm] max-w-full bg-white shadow-lg sm:mb-8 print:mb-0 print:min-h-0 print:w-auto print:break-after-page print:shadow-none';
   const sheetStyle = {
     '--article-align': abntNorm.textAlign,
     '--article-font': `${abntNorm.fontFamily}, Helvetica, sans-serif`,
@@ -107,21 +106,21 @@ export function PreviewPage() {
     '--article-size': abntNorm.fontSize,
     fontFamily: `${abntNorm.fontFamily}, Helvetica, sans-serif`,
     fontSize: abntNorm.fontSize,
-    padding: `${top}cm ${right}cm ${bottom}cm ${left}cm`,
+    '--page-padding': `${top}cm ${right}cm ${bottom}cm ${left}cm`,
   } as React.CSSProperties;
 
   return (
-    <div className="min-h-screen bg-[#2b2b2b] print:bg-white">
-      <header className="print-hidden sticky top-0 z-10 flex flex-wrap items-center gap-4 border-b border-vince-border bg-vince-surface px-6 py-3">
+    <div className="min-h-screen min-w-0 bg-vince-surface print:bg-white">
+      <header className="print-hidden flex flex-wrap items-center gap-3 border-b border-vince-border bg-white px-4 py-3 sm:px-6">
         <a
-          className="inline-flex items-center gap-2 text-sm font-semibold text-vince-primary hover:underline"
+          className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-vince-primary hover:underline"
           href="/admin/editor"
         >
           <ArrowLeftIcon className="h-5 w-5" />
           {t('preview.back')}
         </a>
-        <span className="h-6 w-px bg-vince-border" />
-        <h1 className="flex-1 text-lg font-bold text-vince-text">{t('preview.title')}</h1>
+        <span className="hidden h-6 w-px bg-vince-border sm:block" />
+        <h1 className="min-w-0 flex-1 text-lg font-bold text-vince-text">{t('preview.title')}</h1>
         <Button disabled={!data || exporting} onClick={() => void handleDocx()} variant="outline">
           <DocumentIcon className="h-5 w-5" />
           {t('preview.docx')}
@@ -132,13 +131,6 @@ export function PreviewPage() {
         </Button>
       </header>
 
-      <div className="print-hidden bg-vince-surface px-6 pb-3">
-        <PersonaSwitch
-          className="mt-0 border-0 px-0 py-0"
-          roles={['student', 'advisor', 'coordinator']}
-        />
-      </div>
-
       {exported.isError ? (
         <div className="mx-auto max-w-xl px-6 py-16">
           <EmptyState
@@ -147,15 +139,22 @@ export function PreviewPage() {
             title={t('page.noAccessTitle')}
           />
         </div>
+      ) : exported.isPending ? (
+        <p className="mx-auto max-w-3xl px-6 py-12 text-base text-vince-muted" role="status">
+          Carregando visualização do artigo…
+        </p>
       ) : (
-        <main className="overflow-x-auto px-4 py-8 print:p-0">
-          <div className="origin-top print:!transform-none" style={{ transform: `scale(${zoom})` }}>
+        <main className="min-w-0 overflow-x-auto px-3 py-6 pb-24 sm:px-6 sm:py-8 print:p-0">
+          <div
+            className="preview-document"
+            style={{ '--preview-zoom': zoom } as React.CSSProperties}
+          >
             <section className={sheetClass} style={sheetStyle}>
-              <div className="flex min-h-[23cm] flex-col items-center justify-between text-center">
-                <p className="text-xl uppercase tracking-wide text-vince-text">
+              <div className="preview-cover flex min-h-[23cm] flex-col items-center justify-between text-center">
+                <p className="text-lg uppercase tracking-wide text-vince-text sm:text-xl">
                   {cover.institution}
                 </p>
-                <h2 className="text-3xl font-extrabold leading-tight text-vince-text">
+                <h2 className="text-2xl font-extrabold leading-tight text-vince-text sm:text-3xl">
                   {cover.title}
                 </h2>
                 <div>
@@ -186,7 +185,7 @@ export function PreviewPage() {
               )}
               <ol className="space-y-4">
                 {references.map((reference) => (
-                  <li className="text-left leading-none" key={reference.id}>
+                  <li className="text-left leading-6" key={reference.id}>
                     {formatReference(reference).map((segment, index) =>
                       segment.emphasis ? (
                         <strong key={index}>{segment.text}</strong>
@@ -202,10 +201,10 @@ export function PreviewPage() {
         </main>
       )}
 
-      <div className="print-hidden fixed bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border border-vince-border bg-white px-4 py-2 shadow-lg">
+      <div className="print-hidden fixed bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-vince-border bg-white px-4 py-2 shadow-lg md:flex">
         <button
           aria-label={t('preview.zoomOut')}
-          className="h-8 w-8 rounded-full text-lg font-bold text-vince-muted hover:bg-vince-tertiary disabled:opacity-40"
+          className="h-11 w-11 rounded-full text-lg font-bold text-vince-muted hover:bg-vince-tertiary disabled:opacity-40"
           disabled={zoom === ZOOM_STEPS[0]}
           onClick={() => stepZoom(-1)}
           type="button"
@@ -217,7 +216,7 @@ export function PreviewPage() {
         </span>
         <button
           aria-label={t('preview.zoomIn')}
-          className="h-8 w-8 rounded-full text-lg font-bold text-vince-muted hover:bg-vince-tertiary disabled:opacity-40"
+          className="h-11 w-11 rounded-full text-lg font-bold text-vince-muted hover:bg-vince-tertiary disabled:opacity-40"
           disabled={zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1]}
           onClick={() => stepZoom(1)}
           type="button"

@@ -4,6 +4,8 @@ export type DeliveryState = 'pending' | 'spontaneous' | 'automatic';
 
 /** Situação registrada de uma equipe (RF-ACP-001). Nada aqui é juízo do sistema. */
 export type TeamProgress = {
+  /** Apenas equipes com artigo cadastrado podem abrir o editor e o ciclo de revisão. */
+  articleId?: string;
   advisor: string;
   advisorId: string;
   articleStatus: ArticleStatus;

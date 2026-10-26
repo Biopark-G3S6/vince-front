@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { ArrowRightIcon, LockIcon, WarningIcon } from '@shared/ui';
+import { authenticateDemoUser, demoAccounts, useSignIn, type DemoUser } from '@features/admin';
+import { ArrowRightIcon, LockIcon, Notice, WarningIcon } from '@shared/ui';
 
 import { BrandMark } from '../components/BrandMark';
 
 type LoginPageProps = {
-  onAuthenticated: () => void;
+  onAuthenticated: (user: DemoUser) => void;
   onPasswordSetup: () => void;
 };
 
@@ -17,17 +18,22 @@ const inactiveInstitutionError =
   'A instituição vinculada a esta conta está desativada. Entre em contato com o suporte institucional.';
 
 export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) {
-  const [email, setEmail] = useState('usuario@instituicao.edu.br');
-  const [password, setPassword] = useState('senha123');
-  const [remember, setRemember] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(authenticationError);
+  const signIn = useSignIn();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (email.trim() === 'admin@vinceart.edu.br' && password === 'vince123') {
+    const user = authenticateDemoUser(email, password);
+
+    if (user) {
       setErrorMessage('');
-      onAuthenticated();
+      window.sessionStorage.removeItem('vinceart.article');
+      window.sessionStorage.removeItem('vinceart.editor.identity');
+      signIn(user.id);
+      onAuthenticated(user);
       return;
     }
 
@@ -60,24 +66,49 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-white/70">
             Academic Portal
           </p>
-          <h1 className="mt-5 text-4xl font-black leading-tight">
-            Acesso institucional com fronteiras claras de permissão.
-          </h1>
+          <h2 className="mt-5 text-4xl font-black leading-tight">
+            Um espaço para criar, colaborar e compartilhar conhecimento.
+          </h2>
           <div className="mt-10 space-y-4 text-sm leading-6 text-white/78">
-            <p>Credenciais inválidas e contas inexistentes recebem a mesma resposta.</p>
-            <p>Instituições inativas bloqueiam autenticação imediatamente.</p>
-            <p>Permissões efetivas são resolvidas pelo servidor a cada requisição.</p>
+            <p>Organize seus artigos e acompanhe cada etapa da pesquisa.</p>
+            <p>Converse com sua equipe e receba orientações em um só lugar.</p>
+            <p>Prepare seu trabalho para os eventos da instituição.</p>
           </div>
         </aside>
 
-        <div className="px-8 py-10 sm:px-12 lg:px-14 lg:py-12">
+        <div className="px-5 py-8 sm:px-10 lg:py-12">
           <BrandMark align="center" className="mb-10" />
 
           <div className="text-center">
             <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-vince-tertiary text-vince-primary">
               <LockIcon className="h-6 w-6" />
             </span>
-            <h2 className="mt-5 text-2xl font-extrabold text-vince-text">Entrar na plataforma</h2>
+            <h1 className="mt-5 text-2xl font-extrabold text-vince-text">Entrar na plataforma</h1>
+          </div>
+
+          <Notice className="mt-6" title="Acesso de demonstração">
+            Escolha um perfil. A senha de todos os acessos é{' '}
+            <span className="font-semibold">vince123</span>.
+          </Notice>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Perfis de demonstração">
+            {demoAccounts.map((account) => (
+              <button
+                className="min-w-0 rounded-padrao border border-vince-border bg-white px-3 py-3 text-left transition-colors hover:border-vince-primary hover:bg-vince-tertiary"
+                key={account.role}
+                onClick={() => {
+                  setEmail(account.email);
+                  setPassword('vince123');
+                  setErrorMessage('');
+                }}
+                type="button"
+              >
+                <span className="block font-bold text-vince-primary">{account.label}</span>
+                <span className="mt-1 block break-all text-xs leading-5 text-vince-muted">
+                  {account.email}
+                </span>
+              </button>
+            ))}
           </div>
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
@@ -98,8 +129,13 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
               <span className="mb-2 block text-sm font-semibold text-vince-muted">E-mail</span>
               <input
                 autoComplete="email"
+                aria-invalid={Boolean(errorMessage)}
                 className="h-12 w-full rounded-padrao border border-vince-border bg-white px-5 text-lg text-vince-text transition-colors focus:border-vince-primary"
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setErrorMessage('');
+                }}
+                required
                 type="email"
                 value={email}
               />
@@ -109,23 +145,19 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
               <span className="mb-2 block text-sm font-semibold text-vince-muted">Senha</span>
               <input
                 autoComplete="current-password"
+                aria-invalid={Boolean(errorMessage)}
                 className="h-12 w-full rounded-padrao border border-vince-border bg-white px-5 text-lg text-vince-text transition-colors focus:border-vince-primary"
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setErrorMessage('');
+                }}
+                required
                 type="password"
                 value={password}
               />
             </label>
 
-            <div className="flex items-center justify-between gap-4">
-              <label className="flex items-center gap-3 text-sm font-medium text-vince-muted">
-                <input
-                  checked={remember}
-                  className="h-5 w-5 rounded border-vince-border text-vince-primary"
-                  onChange={(event) => setRemember(event.target.checked)}
-                  type="checkbox"
-                />
-                Lembrar de mim
-              </label>
+            <div className="flex justify-end">
               <a
                 className="font-semibold text-vince-primary hover:underline"
                 href="/recuperar-acesso"

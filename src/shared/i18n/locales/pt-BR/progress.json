@@ -13,10 +13,10 @@
     "report": "Relatório de produção"
   },
   "status": {
-    "STARTED": "Started",
-    "IN_PROGRESS": "In Progress",
-    "IN_REVIEW": "In Review",
-    "FINISHED": "Finished"
+    "STARTED": "Iniciado",
+    "IN_PROGRESS": "Em desenvolvimento",
+    "IN_REVIEW": "Em revisão",
+    "FINISHED": "Finalizado"
   },
   "metrics": {
     "teams": "Equipes sob orientação",

@@ -50,7 +50,7 @@ function ToolButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-6 min-w-6 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary disabled:opacity-35 disabled:hover:bg-transparent',
+        'inline-flex h-11 min-w-11 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary disabled:opacity-35 disabled:hover:bg-transparent',
         active && 'bg-vince-primary text-white hover:bg-vince-primary',
       )}
       disabled={disabled}
@@ -87,7 +87,7 @@ function SelectButton({ label, width }: { label: string; width?: string }) {
     <MenuTrigger asChild>
       <button
         className={cn(
-          'flex h-6 items-center justify-between gap-1 rounded bg-vince-tertiary px-2 text-[11px] text-vince-text',
+          'flex h-11 items-center justify-between gap-2 rounded bg-vince-tertiary px-3 text-sm text-vince-text',
           width,
         )}
         onMouseDown={(e) => e.preventDefault()}
@@ -102,7 +102,9 @@ function SelectButton({ label, width }: { label: string; width?: string }) {
 
 function Group({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center gap-0.5 border-l border-vince-border pl-3">{children}</div>
+    <div className="flex shrink-0 items-center gap-0.5 border-l border-vince-border pl-2">
+      {children}
+    </div>
   );
 }
 
@@ -181,7 +183,10 @@ export function EditorToolbar({
   ];
 
   return (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-x-3 gap-y-1 border-b border-vince-border bg-white px-5 py-1 print:hidden">
+    <div
+      aria-label="Formatação do artigo"
+      className="flex max-w-full flex-nowrap items-center gap-x-2 gap-y-1 overflow-x-auto border-b border-vince-border bg-white px-3 py-2 lg:flex-wrap lg:px-5 [&>*]:shrink-0 print:hidden"
+    >
       <div className="flex gap-1">
         <IconButton
           disabled={!s.canUndo}
@@ -198,7 +203,7 @@ export function EditorToolbar({
       </div>
 
       <Menu>
-        <SelectButton label={s.block} width="w-[96px]" />
+        <SelectButton label={s.block} width="w-[136px]" />
         <MenuContent>
           <MenuItem
             checked={s.block === 'Texto Normal'}
@@ -229,7 +234,7 @@ export function EditorToolbar({
       </Menu>
 
       <Menu>
-        <SelectButton label={fontLabel(s.fontFamily, template.fontFamily)} width="w-[96px]" />
+        <SelectButton label={fontLabel(s.fontFamily, template.fontFamily)} width="w-[136px]" />
         <MenuContent>
           <MenuItem onSelect={() => chain().unsetFontFamily().run()}>Padrão do modelo</MenuItem>
           <MenuSeparator />
@@ -245,10 +250,10 @@ export function EditorToolbar({
         </MenuContent>
       </Menu>
 
-      <div className="flex h-6 items-center rounded bg-vince-tertiary text-[11px]">
+      <div className="flex h-11 items-center rounded bg-vince-tertiary text-sm">
         <button
           aria-label="Diminuir fonte"
-          className="px-1.5"
+          className="inline-flex h-11 w-9 items-center justify-center"
           onClick={() => setSize(size - 1)}
           onMouseDown={(e) => e.preventDefault()}
           type="button"
@@ -257,7 +262,7 @@ export function EditorToolbar({
         </button>
         <input
           aria-label="Tamanho da fonte"
-          className="w-7 bg-transparent text-center outline-none"
+          className="h-11 w-9 bg-transparent text-center outline-none"
           key={size}
           defaultValue={size}
           onBlur={(e) => setSize(Number(e.target.value))}
@@ -270,7 +275,7 @@ export function EditorToolbar({
         />
         <button
           aria-label="Aumentar fonte"
-          className="px-1.5"
+          className="inline-flex h-11 w-9 items-center justify-center"
           onClick={() => setSize(size + 1)}
           onMouseDown={(e) => e.preventDefault()}
           type="button"
@@ -305,7 +310,7 @@ export function EditorToolbar({
           <span className="text-xs line-through">S</span>
         </ToolButton>
         <label
-          className="relative inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-vince-tertiary"
+          className="relative inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded hover:bg-vince-tertiary"
           title="Cor do texto"
         >
           <span className="text-xs font-bold" style={{ color: s.color }}>
@@ -378,7 +383,7 @@ export function EditorToolbar({
           <MenuTrigger asChild>
             <button
               aria-label="Espaçamento entre linhas"
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
+              className="inline-flex h-11 w-11 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
               onMouseDown={(e) => e.preventDefault()}
               title="Espaçamento entre linhas"
               type="button"
@@ -411,7 +416,7 @@ export function EditorToolbar({
           <MenuTrigger asChild>
             <button
               aria-label="Inserir imagem"
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
+              className="inline-flex h-11 w-11 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
               onMouseDown={(e) => e.preventDefault()}
               title="Inserir imagem"
               type="button"

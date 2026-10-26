@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 
-import { currentArticle, DEMO_ARTICLE_ID } from '@features/articles';
+import { canReadArticle, currentArticle, DEMO_ARTICLE_ID } from '@features/articles';
 import { findMilestone, getReviewCycle, saveDraft } from '@features/review';
 import { ApiError } from '@shared/api/apiError';
 import { createId, createMockCollection, respond } from '@shared/api/mockDb';
@@ -53,7 +53,6 @@ type EditorDb = {
 };
 
 const advisorId = () => currentArticle.advisor.id;
-const COORDINATOR_ID = 'user-ricardo';
 const memberIds = () => currentArticle.members.map((member) => member.id);
 
 /** Intervalo mínimo entre pontos intermediários preservados pelo sistema. */
@@ -146,7 +145,7 @@ function memberName(userId: string | null) {
 }
 
 function assertReach(actorId: string) {
-  if (!memberIds().includes(actorId) && actorId !== advisorId() && actorId !== COORDINATOR_ID) {
+  if (!canReadArticle(actorId, currentArticle)) {
     throw new ApiError('RESOURCE_NOT_FOUND');
   }
 }

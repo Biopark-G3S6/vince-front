@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { JSONContent } from '@tiptap/core';
+import * as Dialog from '@radix-ui/react-dialog';
 import { EditorContent, useEditor, useEditorState as useTiptapState } from '@tiptap/react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { PersonaSwitch } from '@features/admin';
 import { currentArticle } from '@features/articles';
 import { getErrorCode } from '@shared/api/apiError';
 import { useFormatters } from '@shared/i18n';
 import { downloadBlob } from '@shared/lib/download';
-import { EmptyState, LockIcon, Notice } from '@shared/ui';
+import { Button, EmptyState, LockIcon, Notice } from '@shared/ui';
 
 import {
   useCollabSession,
@@ -38,7 +38,7 @@ import { createCitationResolver, withoutCover } from '../model/document';
 import { abntNorm, coverDefaults, sameMargins, type EditorState } from '../model/editor';
 import { createArticleExtensions, refreshCitations } from '../model/extensions';
 import { exportHtml, exportText } from '../model/exporters';
-import { useActor, useIdentityStore, type Actor } from '../model/identity';
+import { useActor, type Actor } from '../model/identity';
 import { sortReferences, type Reference } from '../model/references';
 import { blankTemplate } from '@features/articles';
 
@@ -64,8 +64,6 @@ const shortcuts: [string, string][] = [
   ['Lista numerada', 'Ctrl+Shift+7'],
 ];
 
-const personaRoles = ['student', 'advisor', 'coordinator'] as const;
-
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (file.size > MAX_IMAGE_BYTES) {
@@ -79,6 +77,37 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function EditorLoading({ failed = false, onRetry }: { failed?: boolean; onRetry?: () => void }) {
+  return (
+    <main className="min-h-dvh bg-vince-surface px-4 py-8 sm:px-6">
+      <a
+        className="inline-flex min-h-11 items-center text-sm font-semibold text-vince-primary hover:underline"
+        href="/admin/artigos"
+      >
+        ← Voltar aos artigos
+      </a>
+      <div
+        className="mx-auto mt-6 max-w-3xl rounded-lg border border-vince-border bg-white p-6 sm:p-10"
+        role={failed ? 'alert' : 'status'}
+      >
+        <h1 className="text-2xl font-extrabold text-vince-text">
+          {failed ? 'Não foi possível abrir o artigo' : 'Carregando artigo…'}
+        </h1>
+        <p className="mt-3 text-base leading-7 text-vince-muted">
+          {failed
+            ? 'Tente novamente para recuperar o documento.'
+            : 'Preparando o documento e suas referências.'}
+        </p>
+        {failed && onRetry && (
+          <Button className="mt-5" onClick={onRetry}>
+            Tentar novamente
+          </Button>
+        )}
+      </div>
+    </main>
+  );
+}
+
 /** RF-EDT-001 a 008 — Edição do artigo. */
 export function ArticleEditorPage() {
   const { t } = useTranslation('editor');
@@ -90,7 +119,9 @@ export function ArticleEditorPage() {
   if (state.isError) {
     return (
       <div className="min-h-screen bg-vince-surface px-6 py-10">
-        <PersonaSwitch className="mt-0" roles={[...personaRoles]} />
+        <a className="font-semibold text-vince-primary hover:underline" href="/admin/artigos">
+          ← Voltar aos artigos
+        </a>
         <div className="mt-8">
           <EmptyState
             description={t('page.noAccessBody')}
@@ -102,8 +133,12 @@ export function ArticleEditorPage() {
     );
   }
 
+  if (references.isError) {
+    return <EditorLoading failed onRetry={() => void references.refetch()} />;
+  }
+
   if (!state.data || !references.data) {
-    return null;
+    return <EditorLoading />;
   }
 
   // Só integrante da equipe edita, e fora da correção; nos demais casos, leitura.
@@ -117,17 +152,23 @@ export function ArticleEditorPage() {
 type EditorProps = { actor: Actor; references: Reference[]; state: EditorState };
 
 function LiveEditor(props: EditorProps) {
-  const opened = useCollabSession(props.actor.id);
+  const { error, opened, retry } = useCollabSession(props.actor.id);
+
+  if (error) return <EditorLoading failed onRetry={retry} />;
 
   return opened ? (
     <Workspace {...props} isNew={opened.isNew} seed={opened.seed} session={opened.session} />
-  ) : null;
+  ) : (
+    <EditorLoading />
+  );
 }
 
 function ReadOnlyEditor(props: EditorProps) {
   const exported = useExportData();
 
-  return exported.data ? <Workspace {...props} seed={exported.data.content} /> : null;
+  if (exported.isError) return <EditorLoading failed onRetry={() => void exported.refetch()} />;
+
+  return exported.data ? <Workspace {...props} seed={exported.data.content} /> : <EditorLoading />;
 }
 
 type WorkspaceProps = EditorProps & { isNew?: boolean; seed: JSONContent; session?: CollabSession };
@@ -138,7 +179,6 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
   const persistDocument = usePersistDocument();
   const registerCheckpoint = useRegisterCheckpoint();
   const setMargins = useSetMargins();
-  const setMemberId = useIdentityStore((store) => store.setMemberId);
   const canEdit = state.editable && session !== undefined;
   const title = currentArticle.title;
   const articleTemplate = useArticleTemplate();
@@ -191,7 +231,12 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
       // Em edição simultânea o conteúdo vem do documento colaborativo.
       content: session ? undefined : seed,
       editorProps: {
-        attributes: { class: 'article-body', spellcheck: 'true', 'aria-label': 'Corpo do artigo' },
+        attributes: {
+          class: 'article-body',
+          spellcheck: 'true',
+          'aria-label': 'Corpo do artigo',
+          tabindex: '0',
+        },
         handlePaste: (view, event) => {
           const file = [...(event.clipboardData?.files ?? [])].find((f) =>
             f.type.startsWith('image/'),
@@ -465,7 +510,7 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
     </>
   );
 
-  if (!editor || editor.isDestroyed) return null;
+  if (!editor || editor.isDestroyed) return <EditorLoading />;
 
   const saveLabel = !canEdit
     ? t('save.readOnly')
@@ -484,7 +529,8 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
     '--article-size': `${template.fontSize}pt`,
     '--article-line': template.lineHeight,
     '--article-align': template.textAlign,
-    zoom: zoom / 100,
+    '--editor-zoom': zoom / 100,
+    '--page-padding': `${state.margins.top}cm ${state.margins.right}cm ${state.margins.bottom}cm ${state.margins.left}cm`,
   } as React.CSSProperties;
 
   const presence = (
@@ -511,7 +557,7 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
   );
 
   return (
-    <div className="flex h-screen min-w-[960px] flex-col bg-white text-vince-text print:block print:h-auto print:min-w-0">
+    <div className="flex min-h-dvh min-w-0 flex-col bg-white text-vince-text lg:h-dvh print:block print:h-auto print:min-w-0">
       <EditorTopBar
         actions={actions}
         canEdit={canEdit}
@@ -527,34 +573,14 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
         zoom={zoom}
       />
 
-      <div className="flex flex-wrap items-center gap-x-6 border-b border-vince-border bg-white px-5 py-1 print:hidden">
-        <PersonaSwitch className="mt-0 flex-1 border-0 px-0 py-0" roles={[...personaRoles]} />
-        {actor.isStudent && (
-          <label className="flex items-center gap-2 text-xs font-semibold text-vince-muted">
-            {t('identity.label')}
-            <select
-              className="h-8 rounded border border-vince-border bg-white px-2 text-vince-text"
-              onChange={(event) => setMemberId(event.target.value)}
-              value={actor.id}
-            >
-              {currentArticle.members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-
-      <div className="flex h-9 items-center justify-between border-b border-vince-border bg-white px-5 print:hidden">
-        <p className="flex items-center gap-2 text-[11px] text-vince-muted">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-vince-border bg-white px-4 py-2 sm:px-5 print:hidden">
+        <p className="flex min-w-0 items-center gap-2 text-sm text-vince-muted">
           <EditorIcon className="h-3.5 w-3.5" name="page" />
           {template.label}
           {templateVersion ? ` · versão ${templateVersion}, definida na criação do evento` : ''}
         </p>
         <a
-          className="rounded border border-vince-primary px-3 py-1 text-[11px] font-medium text-vince-primary hover:bg-vince-tertiary"
+          className="inline-flex min-h-11 shrink-0 items-center rounded border border-vince-primary px-3 py-2 text-sm font-medium text-vince-primary hover:bg-vince-tertiary"
           href="/artigos/modelo"
         >
           Modelo do evento
@@ -582,7 +608,7 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
         </Notice>
       )}
 
-      <div className="flex min-h-0 flex-1 print:block">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row print:block">
         {showStructure && (
           <StructureSidebar
             editor={editor}
@@ -592,7 +618,8 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
         )}
 
         <main
-          className="flex-1 overflow-auto bg-[#f0eeee] px-6 py-8 print:overflow-visible print:bg-white print:p-0"
+          aria-label="Documento do artigo"
+          className="min-w-0 flex-1 bg-[#f0eeee] px-3 py-5 sm:px-6 sm:py-8 lg:overflow-auto print:overflow-visible print:bg-white print:p-0"
           onMouseDown={(e) => {
             // Clicar na "mesa" fora da folha leva o cursor ao fim do documento.
             if (e.target === e.currentTarget && canEdit) {
@@ -601,48 +628,55 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
             }
           }}
         >
-          <div className="mx-auto w-fit" style={pageStyle}>
-            <div
-              className="article-page"
-              ref={pageRef}
-              style={{
-                padding: `${state.margins.top}cm ${state.margins.right}cm ${state.margins.bottom}cm ${state.margins.left}cm`,
-              }}
-            >
+          <div className="editor-document mx-auto" style={pageStyle}>
+            <div className="article-page" ref={pageRef}>
               <EditorContent editor={editor} />
             </div>
           </div>
         </main>
+      </div>
 
-        {panel && (
-          <aside className="flex w-[340px] shrink-0 flex-col border-l border-vince-border bg-vince-surface print:hidden">
+      <Dialog.Root onOpenChange={(open) => !open && setPanel(null)} open={panel !== null}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 print:hidden" />
+          <Dialog.Content
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-vince-border bg-vince-surface shadow-xl print:hidden"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              editor.view.dom.focus();
+            }}
+          >
             <div className="flex items-center justify-between border-b border-vince-border bg-white px-4 py-2">
-              <h2 className="text-sm font-extrabold text-vince-text">{t(`panels.${panel}`)}</h2>
-              <button
+              <Dialog.Title className="text-lg font-extrabold text-vince-text">
+                {t(`panels.${panel ?? 'references'}`)}
+              </Dialog.Title>
+              <Dialog.Close
                 aria-label={t('panels.close')}
-                className="inline-flex h-8 w-8 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
-                onClick={() => setPanel(null)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded text-2xl text-vince-muted hover:bg-vince-tertiary"
                 type="button"
               >
                 ×
-              </button>
+              </Dialog.Close>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
+            <Dialog.Description className="sr-only">
+              Consulte as referências ou versões do artigo. Feche o painel para voltar ao documento.
+            </Dialog.Description>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
               {panel === 'references' ? (
                 <ReferencesPanel editable={canEdit} editor={editor} references={references} />
               ) : (
                 <HistoryPanel editable={canEdit} editor={editor} references={references} />
               )}
             </div>
-          </aside>
-        )}
-      </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
-      <footer className="flex h-7 items-center justify-between border-t border-vince-border bg-white px-5 text-[10px] text-vince-muted print:hidden">
-        <p className="flex gap-4">
-          <span>Words: {stats.words.toLocaleString('pt-BR')}</span>
-          <span>Pages: {pages}</span>
-          <span>Sections: {stats.sections}</span>
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-vince-border bg-white px-4 py-3 text-xs text-vince-muted sm:px-5 print:hidden">
+        <p className="flex flex-wrap gap-x-4 gap-y-1">
+          <span>Palavras: {stats.words.toLocaleString('pt-BR')}</span>
+          <span>Páginas: {pages}</span>
+          <span>Seções: {stats.sections}</span>
           <span>{t('statusBar.references', { count: references.length })}</span>
           <span className={marginsOffNorm ? 'font-semibold text-[#7a5415]' : undefined}>
             {t('statusBar.margins', state.margins)}

@@ -52,6 +52,8 @@ export function useEditorState() {
  * aba às demais. Enquanto não há sessão, devolve `null`.
  */
 export function useCollabSession(actorId: string) {
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
   const [opened, setOpened] = useState<{
     /** Não há estado preservado: esta aba parte do conteúdo corrente do artigo. */
     isNew: boolean;
@@ -62,22 +64,27 @@ export function useCollabSession(actorId: string) {
   useEffect(() => {
     let cancelled = false;
     let session: CollabSession | undefined;
+    setError(null);
 
-    void loadDocument(actorId).then((stored) => {
-      if (!cancelled) {
-        session = createCollabSession(currentArticle.id, stored.ydoc);
-        setOpened({ isNew: stored.ydoc === null, seed: stored.seed, session });
-      }
-    });
+    void loadDocument(actorId)
+      .then((stored) => {
+        if (!cancelled) {
+          session = createCollabSession(currentArticle.id, stored.ydoc);
+          setOpened({ isNew: stored.ydoc === null, seed: stored.seed, session });
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason);
+      });
 
     return () => {
       cancelled = true;
       session?.destroy();
       setOpened(null);
     };
-  }, [actorId]);
+  }, [actorId, attempt]);
 
-  return opened;
+  return { error, opened, retry: () => setAttempt((current) => current + 1) };
 }
 
 export function usePersistDocument() {

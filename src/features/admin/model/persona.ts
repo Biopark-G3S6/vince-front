@@ -1,59 +1,117 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-/**
- * Perspectiva de demonstração.
- *
- * A identidade do usuário virá do endpoint de identidade (ADR-0015 §18). Enquanto ele
- * não é integrado, as telas que dependem do perfil usam esta perspectiva, escolhida na
- * própria interface. É estado de cliente, por aba — não é controle de acesso
- * (ADR-0015 §19, §20).
- */
 export type Role = 'advisor' | 'student' | 'coordinator' | 'institutionAdmin';
 
 export type DemoUser = {
+  email: string;
   id: string;
   initials: string;
+  institution: string;
   name: string;
+  researchArea: string;
   role: Role;
 };
 
 export const demoUsers: Record<Role, DemoUser> = {
-  advisor: { id: 'user-almeida', initials: 'PA', name: 'Prof. Almeida', role: 'advisor' },
+  advisor: {
+    email: 'professor@vinceart.edu.br',
+    id: 'user-almeida',
+    initials: 'PA',
+    institution: 'Faculdade de Referência Tecnológica',
+    name: 'Prof. Almeida',
+    researchArea: 'Inteligência artificial aplicada à saúde',
+    role: 'advisor',
+  },
   coordinator: {
+    email: 'coordenador@vinceart.edu.br',
     id: 'user-ricardo',
     initials: 'RS',
+    institution: 'Faculdade de Referência Tecnológica',
     name: 'Dr. Ricardo Santos',
+    researchArea: 'Coordenação de pesquisa e extensão',
     role: 'coordinator',
   },
   institutionAdmin: {
+    email: 'admin@vinceart.edu.br',
     id: 'user-admin',
     initials: 'AG',
+    institution: 'Todas as instituições',
     name: 'Admin Geral',
+    researchArea: 'Gestão acadêmica e governança institucional',
     role: 'institutionAdmin',
   },
-  student: { id: 'user-joao', initials: 'JP', name: 'João Pedro Silva', role: 'student' },
+  student: {
+    email: 'aluno@vinceart.edu.br',
+    id: 'user-joao',
+    initials: 'JP',
+    institution: 'Faculdade de Referência Tecnológica',
+    name: 'João Pedro Silva',
+    researchArea: 'Ciência da computação',
+    role: 'student',
+  },
 };
 
-type PersonaState = {
-  role: Role;
-  setRole: (role: Role) => void;
+const usersById = Object.fromEntries(
+  Object.values(demoUsers).map((user) => [user.id, user]),
+) as Record<string, DemoUser>;
+
+export const demoAccounts = [
+  { email: demoUsers.institutionAdmin.email, label: 'Administrador', role: 'institutionAdmin' },
+  { email: demoUsers.coordinator.email, label: 'Coordenador', role: 'coordinator' },
+  { email: demoUsers.advisor.email, label: 'Professor', role: 'advisor' },
+  { email: demoUsers.student.email, label: 'Aluno', role: 'student' },
+] as const;
+
+const DEMO_PASSWORD = 'vince123';
+
+type SessionState = {
+  signIn: (userId: string) => void;
+  signOut: () => void;
+  userId: string | null;
 };
 
-const usePersonaStore = create<PersonaState>()(
+const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
-      role: 'institutionAdmin',
-      setRole: (role) => set({ role }),
+      signIn: (userId) => set({ userId: usersById[userId] ? userId : null }),
+      signOut: () => set({ userId: null }),
+      userId: null,
     }),
-    { name: 'vinceart.persona', storage: createJSONStorage(() => window.sessionStorage) },
+    {
+      name: 'vinceart.session',
+      partialize: (state) => ({ userId: state.userId }),
+      storage: createJSONStorage(() => window.sessionStorage),
+    },
   ),
 );
 
-export function useCurrentUser(): DemoUser {
-  return demoUsers[usePersonaStore((state) => state.role)];
+export function authenticateDemoUser(email: string, password: string): DemoUser | null {
+  if (password !== DEMO_PASSWORD) return null;
+
+  const normalizedEmail = email.trim().toLocaleLowerCase();
+  return Object.values(demoUsers).find((user) => user.email === normalizedEmail) ?? null;
 }
 
-export function useSetRole() {
-  return usePersonaStore((state) => state.setRole);
+export function useAuthenticatedUser(): DemoUser | null {
+  const userId = useSessionStore((state) => state.userId);
+  return userId ? (usersById[userId] ?? null) : null;
+}
+
+export function useCurrentUser(): DemoUser {
+  const user = useAuthenticatedUser();
+
+  if (!user) {
+    throw new Error('Uma sessão autenticada é necessária para acessar esta tela.');
+  }
+
+  return user;
+}
+
+export function useSignIn() {
+  return useSessionStore((state) => state.signIn);
+}
+
+export function useSignOut() {
+  return useSessionStore((state) => state.signOut);
 }

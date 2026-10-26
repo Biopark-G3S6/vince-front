@@ -40,9 +40,10 @@ describe('seleção do idioma (RF-INT-001)', () => {
 
   it('recai no idioma padrão quando o texto não tem tradução', async () => {
     await i18n.loadNamespaces('admin');
+    i18n.addResource('pt-BR', 'admin', 'testFallback', 'Texto disponível apenas em português');
     await changeLanguage('en-US');
 
-    expect(i18n.t('admin:persona.reset')).toBe('Restaurar dados de demonstração');
+    expect(i18n.t('admin:testFallback')).toBe('Texto disponível apenas em português');
   });
 
   it('exibe a própria chave e registra aviso quando ela não existe em idioma algum', async () => {
