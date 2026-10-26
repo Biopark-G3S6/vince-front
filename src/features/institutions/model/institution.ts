@@ -32,6 +32,24 @@ export function makeInitials(name: string) {
     .join('');
 }
 
+export function validateInstitution(
+  institution: Pick<
+    Institution,
+    'name' | 'acronym' | 'legalId' | 'domain' | 'supportEmail' | 'city' | 'state'
+  >,
+) {
+  if (Object.values(institution).some((value) => !value.trim())) {
+    return 'Preencha todos os dados de identificação com valores válidos.';
+  }
+  if (!/^[a-z]{2}$/i.test(institution.state.trim())) {
+    return 'Informe a UF com duas letras.';
+  }
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(institution.domain.trim())) {
+    return 'Informe apenas o domínio institucional, como instituicao.edu.br.';
+  }
+  return null;
+}
+
 export const initialInstitutions: Institution[] = [
   {
     id: 'frt',

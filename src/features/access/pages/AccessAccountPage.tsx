@@ -2,13 +2,15 @@ import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ReactNode } from 'react';
 
-import { AdminShell } from '@features/admin';
+import { PageScaffold, useCurrentUser } from '@features/admin';
+import { changeLanguage, i18n, supportedLanguages } from '@shared/i18n';
+import { toast } from 'sonner';
 import {
   Button,
   CheckCircleIcon,
-  ChevronRightIcon,
   LockIcon,
   LogOutIcon,
+  Notice,
   PlusIcon,
   ShieldIcon,
   TrashIcon,
@@ -46,10 +48,22 @@ const initialGrants: PermissionGrant[] = [
   },
 ];
 
-export function AccessAccountPage() {
-  const [profileName, setProfileName] = useState('Admin Geral');
-  const [researchArea, setResearchArea] = useState('Gestão acadêmica e governança institucional');
-  const [language, setLanguage] = useState('pt-BR');
+type AccessAccountPageProps = {
+  onSignOut: () => void;
+};
+
+const roleView = {
+  advisor: { label: 'PROFESSOR', permissions: 'Orientação e revisão' },
+  coordinator: { label: 'COORDENADOR', permissions: 'Gestão acadêmica' },
+  institutionAdmin: { label: 'ADMINISTRADOR', permissions: 'Administração institucional' },
+  student: { label: 'ALUNO', permissions: 'Autoria e colaboração' },
+} as const;
+
+export function AccessAccountPage({ onSignOut }: AccessAccountPageProps) {
+  const currentUser = useCurrentUser();
+  const [profileName, setProfileName] = useState(currentUser.name);
+  const [researchArea, setResearchArea] = useState(currentUser.researchArea);
+  const [language, setLanguage] = useState(i18n.resolvedLanguage ?? i18n.language);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordSaved, setPasswordSaved] = useState(false);
@@ -72,13 +86,23 @@ export function AccessAccountPage() {
     return checks.filter(Boolean).length;
   }, [newPassword]);
 
-  function saveProfile(event: FormEvent<HTMLFormElement>) {
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setProfileSaved(true);
+    if (!profileName.trim() || !researchArea.trim()) {
+      toast.error('Informe o nome e a área de atuação.');
+      return;
+    }
+    try {
+      await changeLanguage(language);
+      setProfileSaved(true);
+    } catch {
+      toast.error('Não foi possível atualizar o idioma. Tente novamente.');
+    }
   }
 
   function savePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!currentPassword || passwordScore < 5) return;
     setPasswordSaved(true);
     setCurrentPassword('');
     setNewPassword('');
@@ -96,7 +120,7 @@ export function AccessAccountPage() {
         id: crypto.randomUUID(),
         beneficiary: beneficiary.trim(),
         beneficiaryEmail: beneficiaryEmail.trim().toLowerCase(),
-        grantedBy: 'Admin Geral',
+        grantedBy: currentUser.name,
         grantedAt: new Intl.DateTimeFormat('pt-BR', {
           day: '2-digit',
           month: 'short',
@@ -120,136 +144,144 @@ export function AccessAccountPage() {
   }
 
   return (
-    <AdminShell activeSection="access">
-      <main className="px-6 py-12 lg:px-[50px]">
-        <div>
-          <nav className="mb-4 flex items-center gap-2 text-sm text-vince-muted">
-            <span>Admin</span>
-            <ChevronRightIcon className="h-4 w-4" />
-            <span className="font-bold text-vince-text">Acesso</span>
-          </nav>
-          <h1 className="text-4xl font-extrabold tracking-normal text-vince-text">
-            Acesso e autenticação
-          </h1>
-          <p className="mt-3 max-w-3xl text-vince-muted">
-            Gerencie a sessão corrente, dados próprios, senha e concessões diretas ativas.
-          </p>
+    <PageScaffold
+      activeSection="access"
+      eyebrow="Acesso"
+      title="Meu acesso"
+      description="Consulte sua identidade, ajuste preferências e encerre a sessão desta aba."
+    >
+      <Notice className="mt-6" title="Ambiente de demonstração">
+        As alterações de perfil, senha e permissões nesta tela são exemplos e não alteram uma conta
+        institucional.
+      </Notice>
+
+      <section
+        className={`mt-10 grid gap-6 ${currentUser.role === 'institutionAdmin' ? 'xl:grid-cols-[1fr_0.9fr]' : 'mx-auto max-w-4xl'}`}
+      >
+        <div className="space-y-6">
+          <Panel
+            description="Esta identidade foi definida no login e não pode ser trocada dentro da plataforma."
+            icon={ShieldIcon}
+            title="Sessão e identidade"
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              <SessionPill label="Papel" value={roleView[currentUser.role].label} />
+              <SessionPill label="Instituição" value={currentUser.institution} />
+              <SessionPill label="Acesso" value={roleView[currentUser.role].permissions} />
+            </div>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Button onClick={onSignOut} variant="outline">
+                <LogOutIcon className="h-5 w-5" />
+                Encerrar sessão
+              </Button>
+              <span className="text-sm text-vince-muted">Voltar para a tela de entrada.</span>
+            </div>
+          </Panel>
+
+          <Panel
+            description="E-mail, papéis e vínculos não são editáveis pelo próprio usuário."
+            icon={UserIcon}
+            title="Meu perfil"
+          >
+            <form
+              className="space-y-4"
+              onSubmit={(event) => void saveProfile(event)}
+              onChange={() => setProfileSaved(false)}
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Nome" onChange={setProfileName} required value={profileName} />
+                <Field
+                  disabled
+                  label="E-mail"
+                  onChange={() => undefined}
+                  value={currentUser.email}
+                />
+              </div>
+              <Field
+                label="Área de atuação ou pesquisa"
+                onChange={setResearchArea}
+                required
+                value={researchArea}
+              />
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">Idioma</span>
+                <select
+                  className="h-11 w-full rounded-padrao border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => setLanguage(event.target.value)}
+                  value={language}
+                >
+                  {supportedLanguages.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.nativeName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="submit">Salvar perfil</Button>
+                {profileSaved && (
+                  <span
+                    role="status"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-green-800"
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                    Preferências aplicadas à demonstração
+                  </span>
+                )}
+              </div>
+            </form>
+          </Panel>
+
+          <Panel
+            description="Use ao menos 10 caracteres, incluindo maiúscula, minúscula, número e caractere especial."
+            icon={LockIcon}
+            title="Senha"
+          >
+            <form className="space-y-4" onSubmit={savePassword}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field
+                  label="Senha atual"
+                  onChange={setCurrentPassword}
+                  required
+                  type="password"
+                  value={currentPassword}
+                />
+                <Field
+                  label="Nova senha"
+                  onChange={(value) => {
+                    setNewPassword(value);
+                    setPasswordSaved(false);
+                  }}
+                  required
+                  type="password"
+                  value={newPassword}
+                />
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-vince-tertiary">
+                <div
+                  className="h-full rounded-full bg-vince-primary transition-all"
+                  style={{ width: `${Math.max(passwordScore, 1) * 20}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button disabled={!currentPassword || passwordScore < 5} type="submit">
+                  Atualizar senha
+                </Button>
+                {passwordSaved && (
+                  <span
+                    role="status"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-green-800"
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                    Senha validada na demonstração
+                  </span>
+                )}
+              </div>
+            </form>
+          </Panel>
         </div>
 
-        <section className="mt-10 grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-          <div className="space-y-6">
-            <Panel
-              description="A sessão é mantida por cookie HttpOnly; permissões no cliente servem somente para composição da interface."
-              icon={ShieldIcon}
-              title="Sessão e identidade"
-            >
-              <div className="grid gap-4 md:grid-cols-3">
-                <SessionPill label="Papel" value="SYSTEM_ADMIN" />
-                <SessionPill label="Instituição" value="Todas" />
-                <SessionPill label="Permissões" value="8 ativas" />
-              </div>
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <Button variant="outline">
-                  <LogOutIcon className="h-5 w-5" />
-                  Encerrar sessão
-                </Button>
-                <span className="text-sm text-vince-muted">
-                  Encerramento afeta apenas a sessão corrente.
-                </span>
-              </div>
-            </Panel>
-
-            <Panel
-              description="E-mail, papéis e vínculos não são editáveis pelo próprio usuário."
-              icon={UserIcon}
-              title="Meu perfil"
-            >
-              <form className="space-y-4" onSubmit={saveProfile}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Nome" onChange={setProfileName} required value={profileName} />
-                  <Field
-                    disabled
-                    label="E-mail"
-                    onChange={() => undefined}
-                    value="admin@vinceart.edu.br"
-                  />
-                </div>
-                <Field
-                  label="Área de atuação ou pesquisa"
-                  onChange={setResearchArea}
-                  required
-                  value={researchArea}
-                />
-                <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-vince-muted">Idioma</span>
-                  <select
-                    className="h-11 w-full rounded-padrao border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary"
-                    onChange={(event) => setLanguage(event.target.value)}
-                    value={language}
-                  >
-                    <option value="pt-BR">Português (Brasil)</option>
-                    <option value="en-US">English (US)</option>
-                    <option value="es">Español</option>
-                  </select>
-                </label>
-                <div className="flex items-center gap-3">
-                  <Button type="submit">Salvar perfil</Button>
-                  {profileSaved && (
-                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-green-800">
-                      <CheckCircleIcon className="h-4 w-4" />
-                      Perfil atualizado
-                    </span>
-                  )}
-                </div>
-              </form>
-            </Panel>
-
-            <Panel
-              description="Alteração autenticada exige a senha atual e encerra as demais sessões."
-              icon={LockIcon}
-              title="Senha"
-            >
-              <form className="space-y-4" onSubmit={savePassword}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field
-                    label="Senha atual"
-                    onChange={setCurrentPassword}
-                    required
-                    type="password"
-                    value={currentPassword}
-                  />
-                  <Field
-                    label="Nova senha"
-                    onChange={(value) => {
-                      setNewPassword(value);
-                      setPasswordSaved(false);
-                    }}
-                    required
-                    type="password"
-                    value={newPassword}
-                  />
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-vince-tertiary">
-                  <div
-                    className="h-full rounded-full bg-vince-primary transition-all"
-                    style={{ width: `${Math.max(passwordScore, 1) * 20}%` }}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button disabled={passwordScore < 4} type="submit">
-                    Atualizar senha
-                  </Button>
-                  {passwordSaved && (
-                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-green-800">
-                      <CheckCircleIcon className="h-4 w-4" />
-                      Senha atualizada
-                    </span>
-                  )}
-                </div>
-              </form>
-            </Panel>
-          </div>
-
+        {currentUser.role === 'institutionAdmin' && (
           <Panel
             description="Conceda apenas permissões que o usuário concedente possui e revise concessões ativas periodicamente."
             icon={ShieldIcon}
@@ -257,10 +289,16 @@ export function AccessAccountPage() {
           >
             <form className="space-y-4" onSubmit={createGrant}>
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Beneficiário" onChange={setBeneficiary} value={beneficiary} />
+                <Field
+                  label="Beneficiário"
+                  onChange={setBeneficiary}
+                  required
+                  value={beneficiary}
+                />
                 <Field
                   label="E-mail do beneficiário"
                   onChange={setBeneficiaryEmail}
+                  required
                   type="email"
                   value={beneficiaryEmail}
                 />
@@ -322,9 +360,9 @@ export function AccessAccountPage() {
               ))}
             </div>
           </Panel>
-        </section>
-      </main>
-    </AdminShell>
+        )}
+      </section>
+    </PageScaffold>
   );
 }
 
@@ -337,17 +375,17 @@ type PanelProps = {
 
 function Panel({ children, description, icon: Icon, title }: PanelProps) {
   return (
-    <section className="rounded-lg border border-vince-border bg-white p-6 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-vince-border bg-white p-4 shadow-sm sm:p-6">
       <div className="flex items-start gap-4">
         <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-vince-tertiary text-vince-primary">
           <Icon className="h-5 w-5" />
         </span>
-        <div>
+        <div className="min-w-0">
           <h2 className="text-xl font-extrabold text-vince-text">{title}</h2>
           <p className="mt-1 text-sm leading-6 text-vince-muted">{description}</p>
         </div>
       </div>
-      <div className="mt-6">{children}</div>
+      <div className="mt-6 min-w-0 break-words">{children}</div>
     </section>
   );
 }

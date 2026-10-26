@@ -59,8 +59,8 @@ export function DiscussionPage() {
           />
         </div>
       ) : (
-        <section className="mt-8 grid gap-8 xl:grid-cols-[1fr_320px]">
-          <div className="space-y-6">
+        <section className="mt-8 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-6 break-words">
             <article className="rounded-lg border border-vince-border bg-white p-6 shadow-sm">
               <p className="text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
                 {t('discussion.articleLabel')}
@@ -327,7 +327,7 @@ function Composer({ onDone, parentId, replyingTo }: ComposerProps) {
           value={body}
         />
       </label>
-      <div className="mt-3 flex justify-end gap-2">
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
         {isReply && (
           <Button onClick={onDone} size="sm" variant="ghost">
             {t('discussion.cancel')}

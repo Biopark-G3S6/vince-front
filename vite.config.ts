@@ -31,6 +31,10 @@ export default defineConfig({
 
   server: {
     port: 5173,
+    // Capturas e traces contêm HTML; observá-los recarrega a aplicação durante o teste.
+    watch: {
+      ignored: ['**/playwright-report/**', '**/test-results/**', '**/tmp/**', '**/.pnpm-store/**'],
+    },
     proxy: {
       // Em desenvolvimento, a API é servida sob a mesma origem para que o cookie
       // de sessão funcione sem configuração de CORS com credenciais.
@@ -48,6 +52,8 @@ export default defineConfig({
   },
 
   test: {
+    // O storage nativo do Node 25 não deve substituir o Storage do navegador no JSDOM.
+    execArgv: ['--no-experimental-webstorage'],
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/shared/test/setup.ts'],

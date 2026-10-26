@@ -1,10 +1,16 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
+import { toast } from 'sonner';
 
 import { Button } from '@shared/ui';
 
-import { makeInitials, type Institution, type InstitutionStatus } from '../model/institution';
+import {
+  makeInitials,
+  validateInstitution,
+  type Institution,
+  type InstitutionStatus,
+} from '../model/institution';
 
 type NewInstitutionDialogProps = {
   open: boolean;
@@ -50,6 +56,24 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const validationError = validateInstitution({
+      name: form.name,
+      acronym: form.acronym,
+      legalId: form.legalId,
+      domain: form.domain,
+      supportEmail: form.supportEmail,
+      city: form.city,
+      state: form.state,
+    });
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    if (Boolean(form.adminName.trim()) !== Boolean(form.adminEmail.trim())) {
+      toast.error('Informe o nome e o e-mail do administrador inicial, ou deixe ambos em branco.');
+      return;
+    }
+
     onCreate({
       id: crypto.randomUUID(),
       name: form.name.trim(),
@@ -84,6 +108,7 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
 
     setForm(initialForm);
     onOpenChange(false);
+    toast.success('Instituição cadastrada.');
   }
 
   return (
@@ -93,7 +118,7 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
         <Dialog.Content
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[min(94vw,720px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-8 shadow-2xl"
+          className="fixed left-1/2 top-1/2 z-50 max-h-[92dvh] w-[min(94vw,720px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-5 shadow-2xl sm:p-8"
         >
           <Dialog.Title className="text-2xl font-extrabold text-vince-text" id={titleId}>
             Nova instituição
@@ -171,6 +196,8 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
                 <input
                   className="h-11 w-full rounded-padrao border border-vince-border px-4 uppercase text-vince-text focus:border-vince-primary"
                   maxLength={2}
+                  minLength={2}
+                  pattern="[A-Za-z]{2}"
                   onChange={(event) => updateForm('state', event.target.value)}
                   required
                   value={form.state}
@@ -199,6 +226,7 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
                   <input
                     className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
                     onChange={(event) => updateForm('adminName', event.target.value)}
+                    required={Boolean(form.adminEmail.trim())}
                     value={form.adminName}
                   />
                 </label>
@@ -207,6 +235,7 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
                   <input
                     className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"
                     onChange={(event) => updateForm('adminEmail', event.target.value)}
+                    required={Boolean(form.adminName.trim())}
                     type="email"
                     value={form.adminEmail}
                   />
@@ -226,7 +255,7 @@ export function NewInstitutionDialog({ open, onCreate, onOpenChange }: NewInstit
               </select>
             </label>
 
-            <div className="flex justify-end gap-3 pt-3">
+            <div className="flex flex-wrap justify-end gap-3 pt-3">
               <Dialog.Close asChild>
                 <Button type="button" variant="outline">
                   Cancelar

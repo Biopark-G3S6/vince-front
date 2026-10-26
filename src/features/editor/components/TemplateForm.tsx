@@ -1,47 +1,66 @@
-import { useMemo, useState, type FormEvent } from 'react';
+﻿import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
 import { toast } from 'sonner';
 
-import { useFormatters } from '@shared/i18n';
-import { Button } from '@shared/ui';
-
-import { useSaveTemplate } from '@features/articles';
-import { createArticleExtensions } from '../model/extensions';
+import { useCurrentUser } from '@features/admin';
 import {
-  courses,
+  useSaveTemplate,
   currentVersion,
   defaultFormat,
   fontOptions,
   sectionsContent,
+  type EventTemplate,
   type StoredTemplate,
   type TemplateFormat,
 } from '@features/articles';
+import { useFormatters } from '@shared/i18n';
+import { Button, Notice, UploadIcon } from '@shared/ui';
+
+import { createArticleExtensions } from '../model/extensions';
 
 import { EditorToolbar } from './EditorToolbar';
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+const fieldClass =
+  'h-11 min-w-0 w-full rounded-lg border border-vince-border bg-white px-3 text-base text-vince-text focus:border-vince-primary';
+const labelClass = 'flex min-w-0 flex-col gap-2 text-sm font-semibold text-vince-muted';
+
 type TemplateFormProps = {
+  events?: EventTemplate[];
+  importMode?: boolean;
+  initialEventId?: string;
   onClose: () => void;
   onError: (error: unknown) => void;
-  /** `null` ao criar um template novo. */
   template: StoredTemplate | null;
 };
 
-const fieldClass =
-  'h-9 w-full rounded border border-vince-border bg-white px-2 text-xs text-vince-text focus:border-vince-primary';
-const labelClass = 'flex flex-col gap-1 text-[11px] font-semibold text-vince-muted';
-
-/**
- * RF-TPL-001 — Manter template de artigo. O conteúdo inicial é composto no mesmo editor
- * do artigo, e salvar registra uma versão nova, preservando as anteriores.
- */
-export function TemplateForm({ onClose, onError, template }: TemplateFormProps) {
+/** A mesma composição de conteúdo e formatação serve para modelos pessoais e de eventos. */
+export function TemplateForm({
+  events = [],
+  importMode = false,
+  initialEventId,
+  onClose,
+  onError,
+  template,
+}: TemplateFormProps) {
+  const user = useCurrentUser();
   const { formatDateTime } = useFormatters();
   const saveTemplate = useSaveTemplate();
   const readOnly = template !== null && !template.canMaintain;
+  const relatedEventId =
+    template?.eventId ?? events.find((event) => event.templateId === template?.id)?.id;
   const [title, setTitle] = useState(template?.title ?? '');
   const [description, setDescription] = useState(template?.description ?? '');
-  const [courseId, setCourseId] = useState(template?.courseId ?? '');
+  const [visibility, setVisibility] = useState<'personal' | 'event'>(
+    template?.visibility === 'event' ||
+      (template !== null && template.visibility === undefined && Boolean(relatedEventId))
+      ? 'event'
+      : 'personal',
+  );
+  const [eventId, setEventId] = useState(relatedEventId ?? initialEventId ?? events[0]?.id ?? '');
   const [format, setFormat] = useState<TemplateFormat>(
     template
       ? {
@@ -52,36 +71,91 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
         }
       : defaultFormat,
   );
+  const [converting, setConverting] = useState(false);
+  const [imported, setImported] = useState<{ fileName: string; messages: string[] } | null>(null);
   const extensions = useMemo(() => createArticleExtensions(), []);
   const editor = useEditor({
     content: template
       ? currentVersion(template).content
-      : sectionsContent(['1. Introdução', '2. Desenvolvimento', '3. Conclusão']),
+      : importMode
+        ? ''
+        : sectionsContent(['1. Introdução', '2. Desenvolvimento', '3. Conclusão']),
     editable: !readOnly,
     editorProps: {
-      attributes: { 'aria-label': 'Conteúdo inicial do template', class: 'article-body' },
+      attributes: { 'aria-label': 'Conteúdo inicial do modelo', class: 'article-body' },
     },
     extensions,
   });
   const formatAsTemplate = { ...format, description, id: 'draft', label: title, title };
+  const canPublish = user.role !== 'student' && events.length > 0;
+
+  async function importFile(file: File) {
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      toast.error('Selecione um arquivo Word no formato .docx.');
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error('O arquivo deve ter até 10 MB.');
+      return;
+    }
+    setConverting(true);
+    try {
+      const mammoth = await import('mammoth/mammoth.browser.js');
+      const result = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+      // O esquema do editor filtra o HTML e o conteúdo salvo é JSON estruturado.
+      setImported(null);
+      editor.commands.setContent(result.value);
+      if (editor.isEmpty) {
+        toast.error('O arquivo não contém conteúdo que possa ser usado como modelo.');
+        return;
+      }
+      setTitle((current) => current || file.name.replace(/\.docx$/i, ''));
+      setImported({
+        fileName: file.name,
+        messages: [...new Set(result.messages.map((message) => message.message))],
+      });
+      toast.success('Modelo importado. Confira a prévia antes de salvar.');
+    } catch {
+      toast.error('Não foi possível ler este arquivo. Confira se ele é um documento .docx válido.');
+    } finally {
+      setConverting(false);
+    }
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-
+    if (
+      readOnly ||
+      converting ||
+      saveTemplate.isPending ||
+      !title.trim() ||
+      (importMode && !imported)
+    )
+      return;
+    const selectedEvent =
+      visibility === 'event' ? events.find((event) => event.id === eventId) : undefined;
+    if (visibility === 'event' && (!canPublish || !selectedEvent)) return;
     saveTemplate.mutate(
       {
         content: editor.getJSON(),
-        courseId: courseId || null,
-        description,
+        courseId: selectedEvent?.courseId ?? null,
+        description: description.trim(),
+        eventId: visibility === 'event' ? eventId : undefined,
         format,
         id: template?.id,
-        title,
+        ownerId: user.id,
+        title: title.trim(),
+        visibility,
       },
       {
         onError,
         onSuccess: () => {
           toast.success(
-            template ? 'Template alterado: versão nova registrada.' : 'Template criado.',
+            template
+              ? 'Modelo atualizado com uma nova versão.'
+              : visibility === 'event'
+                ? 'Modelo publicado no evento.'
+                : 'Modelo salvo em Meus modelos.',
           );
           onClose();
         },
@@ -94,43 +168,125 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
     '--article-font': format.fontFamily,
     '--article-line': format.lineHeight,
     '--article-size': `${format.fontSize}pt`,
-  } as React.CSSProperties;
+  } as CSSProperties;
 
   return (
-    <form className="mt-10" onSubmit={handleSubmit}>
-      <h1 className="text-2xl font-bold text-vince-primary">
-        {template ? (readOnly ? 'Consultar template' : 'Alterar template') : 'Novo template'}
-      </h1>
-      <p className="mt-2 text-xs text-vince-muted">
-        O template é semente: define o documento inicial do artigo e não impõe verificação
-        posterior. O que se verifica ao longo do ciclo é a conformidade à norma.
+    <form className="mt-6 min-w-0 pb-8" onSubmit={handleSubmit}>
+      <Button onClick={onClose} size="sm" variant="ghost">
+        ← Voltar aos modelos
+      </Button>
+      <h2 className="mt-4 text-2xl font-extrabold text-vince-text">
+        {template
+          ? readOnly
+            ? 'Consultar modelo'
+            : 'Editar modelo'
+          : importMode
+            ? 'Importar modelo'
+            : 'Criar modelo'}
+      </h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-vince-muted">
+        Salve um documento inicial para reutilizar em novos artigos.{' '}
+        {canPublish
+          ? 'Você pode guardar o modelo como pessoal ou disponibilizá-lo aos participantes de um evento.'
+          : 'O modelo ficará disponível na sua biblioteca pessoal.'}
       </p>
 
-      <fieldset className="mt-6 grid gap-4 md:grid-cols-2" disabled={readOnly}>
+      {importMode && (
+        <div className="mt-6 rounded-lg border border-dashed border-vince-border bg-white p-5">
+          <label className={labelClass}>
+            <span className="flex items-center gap-2">
+              <UploadIcon className="h-5 w-5" />
+              Arquivo do modelo
+            </span>
+            <input
+              accept={`${DOCX_TYPE},.docx`}
+              className="block max-w-full rounded-lg border border-vince-border p-3 text-sm file:mr-4 file:cursor-pointer file:rounded file:border-0 file:bg-vince-tertiary file:px-3 file:py-2 file:font-semibold file:text-vince-primary"
+              disabled={converting || saveTemplate.isPending}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void importFile(file);
+              }}
+              type="file"
+            />
+          </label>
+          <p className="mt-2 text-sm text-vince-muted">
+            Word (.docx), até 10 MB. O conteúdo será convertido para revisão no editor abaixo.
+          </p>
+          {converting && (
+            <p className="mt-3 font-semibold text-vince-primary" role="status">
+              Convertendo modelo…
+            </p>
+          )}
+          {imported && (
+            <p className="mt-3 break-words text-sm font-semibold text-vince-primary" role="status">
+              Arquivo importado: {imported.fileName}
+            </p>
+          )}
+        </div>
+      )}
+
+      <fieldset
+        className="mt-6 grid gap-4 md:grid-cols-2"
+        disabled={readOnly || converting || saveTemplate.isPending}
+      >
         <label className={labelClass}>
-          Nome *
-          <input className={fieldClass} onChange={(e) => setTitle(e.target.value)} value={title} />
+          Nome do modelo
+          <input
+            className={fieldClass}
+            maxLength={160}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Ex.: Resumo expandido do simpósio"
+            required
+            value={title}
+          />
         </label>
         <label className={labelClass}>
-          Restrição
+          Disponibilidade
           <select
             className={fieldClass}
-            onChange={(e) => setCourseId(e.target.value)}
-            value={courseId}
+            onChange={(event) => setVisibility(event.target.value as 'personal' | 'event')}
+            value={visibility}
           >
-            <option value="">Toda a instituição</option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                Restrito ao curso de {course.name}
-              </option>
-            ))}
+            <option value="personal">Meus modelos (pessoal)</option>
+            {canPublish && <option value="event">Modelo do evento</option>}
           </select>
         </label>
+        {visibility === 'event' && (
+          <label className={`${labelClass} md:col-span-2`}>
+            Evento
+            <select
+              className={fieldClass}
+              onChange={(event) => setEventId(event.target.value)}
+              required
+              value={eventId}
+            >
+              <option value="" disabled>
+                Selecione o evento
+              </option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
+                  {event.kind === 'practice'
+                    ? ' (teste)'
+                    : event.kind === 'tcc'
+                      ? ' (TCC)'
+                      : ' (oficial)'}
+                </option>
+              ))}
+            </select>
+            <span className="font-normal">
+              Os participantes do evento poderão escolher este modelo ao criar um artigo.
+            </span>
+          </label>
+        )}
         <label className={`${labelClass} md:col-span-2`}>
           Descrição
           <input
             className={fieldClass}
-            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Descreva a finalidade e as orientações do modelo"
             value={description}
           />
         </label>
@@ -138,7 +294,7 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
           Fonte
           <select
             className={fieldClass}
-            onChange={(e) => setFormat({ ...format, fontFamily: e.target.value })}
+            onChange={(event) => setFormat({ ...format, fontFamily: event.target.value })}
             value={format.fontFamily}
           >
             {fontOptions.map((option) => (
@@ -148,14 +304,16 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
             ))}
           </select>
         </label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-3">
           <label className={labelClass}>
             Tamanho
             <input
               className={fieldClass}
               max={18}
               min={8}
-              onChange={(e) => setFormat({ ...format, fontSize: Number(e.target.value) || 12 })}
+              onChange={(event) =>
+                setFormat({ ...format, fontSize: Number(event.target.value) || 12 })
+              }
               type="number"
               value={format.fontSize}
             />
@@ -164,7 +322,7 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
             Entrelinha
             <select
               className={fieldClass}
-              onChange={(e) => setFormat({ ...format, lineHeight: Number(e.target.value) })}
+              onChange={(event) => setFormat({ ...format, lineHeight: Number(event.target.value) })}
               value={format.lineHeight}
             >
               {[1, 1.15, 1.5, 1.6, 2].map((value) => (
@@ -178,8 +336,11 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
             Alinhamento
             <select
               className={fieldClass}
-              onChange={(e) =>
-                setFormat({ ...format, textAlign: e.target.value as TemplateFormat['textAlign'] })
+              onChange={(event) =>
+                setFormat({
+                  ...format,
+                  textAlign: event.target.value as TemplateFormat['textAlign'],
+                })
               }
               value={format.textAlign}
             >
@@ -190,11 +351,24 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
         </div>
       </fieldset>
 
-      <h2 className="mt-8 text-sm font-bold text-vince-text">Conteúdo inicial</h2>
-      <p className="mt-1 text-[11px] text-vince-muted">
-        Seções e cabeçalhos com que cada artigo do evento nasce — composto no mesmo editor do
-        artigo.
+      <h3 className="mt-8 text-lg font-extrabold text-vince-text">
+        {importMode ? 'Prévia do modelo' : 'Conteúdo inicial'}
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-vince-muted">
+        {importMode
+          ? 'Confira as seções e ajuste o conteúdo importado antes de salvar. Fontes, margens e outros detalhes do Word podem precisar de ajustes.'
+          : 'Escreva as seções, os cabeçalhos e as instruções que aparecerão no novo artigo.'}
       </p>
+      {imported && imported.messages.length > 0 && (
+        <Notice className="mt-4" tone="warning">
+          <p className="font-semibold">Alguns elementos do Word precisam de revisão:</p>
+          <ul className="mt-2 list-disc pl-5 text-sm">
+            {imported.messages.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </Notice>
+      )}
       <div className="mt-3 overflow-hidden rounded-lg border border-vince-border bg-white">
         {!readOnly && (
           <EditorToolbar
@@ -209,33 +383,44 @@ export function TemplateForm({ onClose, onError, template }: TemplateFormProps) 
             template={formatAsTemplate}
           />
         )}
-        <div className="max-h-[420px] overflow-y-auto bg-[#f0eeee] p-6">
+        <div className="max-h-[60vh] overflow-auto bg-[#f0eeee] p-3 sm:p-6">
           <div className="article-page mx-auto" style={{ ...pageStyle, minHeight: 320 }}>
             <EditorContent editor={editor} />
           </div>
         </div>
       </div>
-
       {template && (
-        <>
-          <h2 className="mt-8 text-sm font-bold text-vince-text">Versões</h2>
-          <ol className="mt-2 space-y-1 text-xs text-vince-muted">
+        <div className="mt-6">
+          <h3 className="text-lg font-extrabold text-vince-text">Versões</h3>
+          <ol className="mt-2 space-y-2 text-sm text-vince-muted">
             {[...template.versions].reverse().map((version) => (
               <li key={version.number}>
                 Versão {version.number} — {version.createdBy}, {formatDateTime(version.createdAt)}
               </li>
             ))}
           </ol>
-        </>
+        </div>
       )}
-
-      <div className="mt-8 flex justify-end gap-3">
-        <Button onClick={onClose} size="sm" variant="outline">
+      <div className="mt-8 flex flex-wrap justify-end gap-3">
+        <Button disabled={saveTemplate.isPending} onClick={onClose} variant="outline">
           {readOnly ? 'Voltar' : 'Cancelar'}
         </Button>
         {!readOnly && (
-          <Button disabled={saveTemplate.isPending} size="sm" type="submit">
-            {template ? 'Salvar como nova versão' : 'Criar template'}
+          <Button
+            disabled={
+              saveTemplate.isPending ||
+              converting ||
+              !title.trim() ||
+              (importMode && !imported) ||
+              (visibility === 'event' && !eventId)
+            }
+            type="submit"
+          >
+            {saveTemplate.isPending
+              ? 'Salvando…'
+              : template
+                ? 'Salvar nova versão'
+                : 'Salvar modelo'}
           </Button>
         )}
       </div>

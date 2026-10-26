@@ -26,13 +26,19 @@ export function Tabs<Key extends string>({
   value,
 }: TabsProps<Key>) {
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
       return;
     }
 
     const currentIndex = items.findIndex((item) => item.key === value);
     const offset = event.key === 'ArrowRight' ? 1 : -1;
-    const next = items[(currentIndex + offset + items.length) % items.length];
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : (currentIndex + offset + items.length) % items.length;
+    const next = items[nextIndex];
 
     if (next) {
       event.preventDefault();

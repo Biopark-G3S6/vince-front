@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 
 import {
   Button,
+  EmptyState,
   FilterIcon,
   GraduationCapIcon,
   MoreHorizontalIcon,
@@ -16,7 +18,9 @@ import {
   SectionPanel,
   StatusBadge,
 } from '../components/AcademicPrimitives';
-import { courses, type Course, type CourseStatus } from '../model/academic';
+import { courses as initialCourses, type Course, type CourseStatus } from '../model/academic';
+import { useAcademicCollection } from '../api/academicStore';
+import { AcademicActionDialog, AcademicField } from '../components/AcademicActionDialog';
 
 const statusView: Record<CourseStatus, { label: string; tone: 'success' | 'muted' }> = {
   active: { label: 'Ativo', tone: 'success' },
@@ -24,6 +28,8 @@ const statusView: Record<CourseStatus, { label: string; tone: 'success' | 'muted
 };
 
 export function CoursesPage() {
+  const [courses, setCourses] = useAcademicCollection('courses');
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState(courses[0]?.id ?? '');
   const [status, setStatus] = useState<'all' | CourseStatus>('all');
@@ -41,15 +47,61 @@ export function CoursesPage() {
         matchesStatus && (normalizedSearch.length === 0 || searchable.includes(normalizedSearch))
       );
     });
-  }, [search, status]);
+  }, [courses, search, status]);
 
   const selectedCourse =
-    courses.find((course) => course.id === selectedCourseId) ?? visibleCourses[0] ?? courses[0];
+    visibleCourses.find((course) => course.id === selectedCourseId) ?? visibleCourses[0];
+  const coordinatorOptions = Array.from(
+    new Map(
+      [
+        ...initialCourses.flatMap((course) => (course.coordinator ? [course.coordinator] : [])),
+        ...courses.flatMap((course) => (course.coordinator ? [course.coordinator] : [])),
+        { name: 'Dra. Helena Torres', email: 'helena.torres@frt.edu.br' },
+        { name: 'Prof. Gustavo Lima', email: 'gustavo.lima@frt.edu.br' },
+      ].map((coordinator) => [coordinator.email, coordinator]),
+    ).values(),
+  );
+
+  function createCourse(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
+    const code = String(form.get('code') ?? '')
+      .trim()
+      .toUpperCase();
+    const institution = String(form.get('institution') ?? '').trim();
+    if (!name || !code || !institution) {
+      toast.error('Preencha o nome, o código e a instituição.');
+      return;
+    }
+    if (courses.some((course) => course.code.toUpperCase() === code)) {
+      toast.error('Já existe um curso com este código.');
+      return;
+    }
+    const course: Course = {
+      id: crypto.randomUUID(),
+      name,
+      code,
+      institution,
+      coordinator: null,
+      status: 'active',
+      classes: 0,
+      events: 0,
+      students: 0,
+      createdAt: new Date().toISOString(),
+    };
+    setCourses((current) => [...current, course]);
+    setSelectedCourseId(course.id);
+    setSearch('');
+    setStatus('all');
+    setCreating(false);
+    toast.success('Curso cadastrado na demonstração.');
+  }
 
   return (
     <PageScaffold
       actions={
-        <Button className="rounded-padrao px-7" size="md">
+        <Button className="rounded-padrao px-7" onClick={() => setCreating(true)} size="md">
           <PlusIcon className="h-5 w-5" />
           Novo curso
         </Button>
@@ -59,7 +111,24 @@ export function CoursesPage() {
       eyebrow="Cursos"
       title="Cursos"
     >
-      <section className="mt-8 grid gap-4 md:grid-cols-3">
+      <AcademicActionDialog
+        description="Informe os dados do novo curso. Os dados são salvos neste navegador."
+        onOpenChange={setCreating}
+        onSubmit={createCourse}
+        open={creating}
+        submitLabel="Criar curso"
+        title="Novo curso"
+      >
+        <AcademicField label="Nome do curso" name="name" required />
+        <AcademicField label="Código" name="code" required />
+        <AcademicField
+          defaultValue={courses[0]?.institution}
+          label="Instituição"
+          name="institution"
+          required
+        />
+      </AcademicActionDialog>
+      <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <MetricCard
           icon={<GraduationCapIcon className="h-5 w-5" />}
           label="Cursos ativos"
@@ -92,6 +161,7 @@ export function CoursesPage() {
           </label>
 
           <select
+            aria-label="Filtrar cursos por status"
             className="h-12 rounded-lg border border-vince-border bg-white px-5 text-base text-vince-text focus:border-vince-primary lg:w-[190px]"
             onChange={(event) => setStatus(event.target.value as 'all' | CourseStatus)}
             value={status}
@@ -103,17 +173,17 @@ export function CoursesPage() {
         </div>
       </section>
 
-      <section className="mt-8 grid gap-8 xl:grid-cols-[1fr_380px]">
-        <section className="overflow-hidden rounded-lg border border-vince-border bg-white shadow-sm">
-          <div className="grid min-w-[940px] grid-cols-[1.7fr_0.7fr_1.4fr_0.55fr_0.55fr_0.3fr] border-b border-vince-border bg-[#fbf8f8] px-6 py-5 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
-            <span>Curso</span>
-            <span>Status</span>
-            <span>Coordenador</span>
-            <span>Turmas</span>
-            <span>Eventos</span>
-            <span>Ações</span>
-          </div>
-          <div className="overflow-x-auto">
+      <section className="mt-8 grid min-w-0 gap-8 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-vince-border bg-white shadow-sm">
+          <div aria-label="Lista de cursos" className="overflow-x-auto" role="region" tabIndex={0}>
+            <div className="grid min-w-[940px] grid-cols-[1.7fr_0.7fr_1.4fr_0.55fr_0.55fr_0.3fr] border-b border-vince-border bg-[#fbf8f8] px-6 py-5 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
+              <span>Curso</span>
+              <span>Status</span>
+              <span>Coordenador</span>
+              <span>Turmas</span>
+              <span>Eventos</span>
+              <span>Ações</span>
+            </div>
             {visibleCourses.map((course) => (
               <CourseRow
                 course={course}
@@ -122,12 +192,36 @@ export function CoursesPage() {
                 selected={course.id === selectedCourse?.id}
               />
             ))}
+            {visibleCourses.length === 0 && (
+              <EmptyState
+                title="Nenhum curso encontrado"
+                description="Ajuste a busca ou o status para consultar outros cursos."
+              />
+            )}
           </div>
         </section>
 
         <SectionPanel title="Designar coordenador">
           {selectedCourse && (
-            <div className="space-y-5">
+            <form
+              className="space-y-5"
+              key={`${selectedCourse.id}-${selectedCourse.coordinator?.email ?? 'none'}`}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const email = String(new FormData(event.currentTarget).get('coordinator') ?? '');
+                const coordinator = coordinatorOptions.find((option) => option.email === email);
+                if (!coordinator) {
+                  toast.error('Selecione um coordenador.');
+                  return;
+                }
+                setCourses((current) =>
+                  current.map((course) =>
+                    course.id === selectedCourse.id ? { ...course, coordinator } : course,
+                  ),
+                );
+                toast.success('Coordenação atualizada na demonstração.');
+              }}
+            >
               <div className="rounded-lg border border-vince-border bg-[#fffafa] p-5">
                 <p className="text-sm font-bold uppercase tracking-[0.08em] text-vince-primary">
                   Curso selecionado
@@ -142,24 +236,50 @@ export function CoursesPage() {
                 <span className="mb-2 block text-sm font-semibold text-vince-muted">
                   Coordenador ativo
                 </span>
-                <select className="h-12 w-full rounded-lg border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary">
-                  <option>{selectedCourse.coordinator?.name ?? 'Sem coordenador'}</option>
-                  <option>Dra. Helena Torres</option>
-                  <option>Prof. Gustavo Lima</option>
+                <select
+                  className="h-12 w-full rounded-lg border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary"
+                  defaultValue={selectedCourse.coordinator?.email ?? ''}
+                  name="coordinator"
+                  required
+                >
+                  <option value="">Selecione um coordenador</option>
+                  {coordinatorOptions.map((coordinator) => (
+                    <option key={coordinator.email} value={coordinator.email}>
+                      {coordinator.name}
+                    </option>
+                  ))}
                 </select>
               </label>
 
               <div className="grid gap-3">
-                <Button>Salvar designação</Button>
-                <Button variant="outline">Revogar coordenação</Button>
+                <Button type="submit">Salvar designação</Button>
+                <Button
+                  disabled={!selectedCourse.coordinator}
+                  onClick={() => {
+                    setCourses((current) =>
+                      current.map((course) =>
+                        course.id === selectedCourse.id ? { ...course, coordinator: null } : course,
+                      ),
+                    );
+                    toast.success('Coordenação revogada na demonstração.');
+                  }}
+                  variant="outline"
+                >
+                  Revogar coordenação
+                </Button>
               </div>
 
               <div className="rounded-lg border border-vince-border p-4 text-sm leading-6 text-vince-muted">
                 <p className="font-bold text-vince-text">Trilha de auditoria</p>
-                <p className="mt-2">Última alteração: 18 Set, 2026 por Admin Geral.</p>
+                <p className="mt-2">Os dados desta demonstração são salvos neste navegador.</p>
                 <p>Regra aplicada: no máximo um coordenador ativo por curso.</p>
               </div>
-            </div>
+            </form>
+          )}
+          {!selectedCourse && (
+            <p className="text-sm text-vince-muted">
+              Selecione um curso da lista para gerenciar a coordenação.
+            </p>
           )}
         </SectionPanel>
       </section>
@@ -200,6 +320,7 @@ function CourseRow({
       <span className="font-semibold text-vince-muted">{course.events}</span>
       <button
         aria-label={`Selecionar ${course.name}`}
+        aria-pressed={selected}
         className="inline-flex h-10 w-10 items-center justify-center rounded-full text-vince-primary hover:bg-vince-tertiary"
         onClick={onSelect}
         type="button"

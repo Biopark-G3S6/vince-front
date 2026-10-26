@@ -1,5 +1,9 @@
 # Features
 
+> Estado atual: as camadas `api/` usam dados simulados no navegador. As regras abaixo
+> descrevem a organização e a arquitetura pretendida; a integração com o backend
+> permanece pendente. Consulte [`AUDITORIA.md`](../../AUDITORIA.md).
+
 Cada diretório aqui espelha um **módulo do backend** (`ADR-0015 §1`). A simetria é intencional:
 quando o time discute "o módulo de orientação", os dois repositórios têm uma pasta com esse nome,
 e a alteração de uma capacidade fica contida dos dois lados.
@@ -17,7 +21,11 @@ e a alteração de uma capacidade fica contida dos dois lados.
   index.ts      superfície pública — a fachada da feature
 ```
 
-## As regras que o lint impõe
+## Regras de arquitetura
+
+As fronteiras de importação são verificadas pelo ESLint. A ausência de ciclos e a
+separação entre componentes e chamadas diretas de API ainda exigem revisão de código;
+a configuração atual não contém regras específicas que comprovem esses dois itens.
 
 | Regra                                                          | Origem          |
 | :------------------------------------------------------------- | :-------------- |

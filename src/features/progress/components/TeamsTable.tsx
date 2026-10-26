@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { useFormatters } from '@shared/i18n';
+import { articleHref } from '@features/articles';
 import { cn } from '@shared/lib/cn';
 import { StatusBadge, WarningIcon, type BadgeTone } from '@shared/ui';
 
@@ -32,7 +33,7 @@ type TeamsTableProps = {
 };
 
 const linkHref = {
-  article: '/admin/artigos',
+  article: '/artigos/editor',
   discussion: '/admin/discussao',
   review: '/admin/correcao',
 };
@@ -47,7 +48,12 @@ export function TeamsTable({ links, showAdvisor = false, teams }: TeamsTableProp
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div
+      aria-label={t('table.caption')}
+      className="min-w-0 overflow-x-auto"
+      role="region"
+      tabIndex={0}
+    >
       <table className="w-full min-w-[1080px] text-left align-top">
         <caption className="sr-only">{t('table.caption')}</caption>
         <thead className="border-b border-vince-border bg-vince-surface text-sm text-vince-muted">
@@ -126,18 +132,26 @@ export function TeamsTable({ links, showAdvisor = false, teams }: TeamsTableProp
                 )}
               </td>
               <td className="px-4 py-4 align-top">
-                <ul className="space-y-1">
-                  {links.map((link) => (
-                    <li key={link}>
-                      <a
-                        className="text-sm font-semibold text-vince-primary underline"
-                        href={linkHref[link]}
-                      >
-                        {t(`table.${link}`)}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                {team.articleId ? (
+                  <ul className="space-y-1">
+                    {links.map((link) => (
+                      <li key={link}>
+                        <a
+                          className="text-sm font-semibold text-vince-primary underline"
+                          href={articleHref(linkHref[link], team.articleId)}
+                        >
+                          {t(`table.${link}`)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-sm text-vince-muted">
+                    {t('table.previewOnly', {
+                      defaultValue: 'Equipe de demonstração sem artigo cadastrado.',
+                    })}
+                  </span>
+                )}
               </td>
             </tr>
           ))}

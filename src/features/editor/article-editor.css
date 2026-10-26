@@ -5,8 +5,9 @@
   --page-height: 1123px;
   box-sizing: border-box;
   width: 794px;
+  max-width: 100%;
   min-height: var(--page-height);
-  padding: 72px;
+  padding: var(--page-padding, 72px);
   background-color: #fff;
   /* Linha sutil a cada página A4: orientação visual de paginação. */
   background-image: repeating-linear-gradient(
@@ -26,6 +27,53 @@
   outline: none;
   min-height: 600px;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.editor-document {
+  width: fit-content;
+  zoom: var(--editor-zoom, 1);
+}
+
+.preview-sheet {
+  padding: var(--page-padding);
+  overflow-wrap: anywhere;
+}
+
+.preview-document {
+  zoom: var(--preview-zoom, 1);
+}
+
+/* Na tela pequena, o texto reflui com margem de leitura; exportação e impressão
+   continuam usando as medidas da norma. */
+@media screen and (max-width: 1023px) {
+  .editor-document {
+    width: 100%;
+    zoom: 1;
+  }
+
+  .article-page {
+    width: 100%;
+    min-height: 70vh;
+    padding: 24px 20px;
+    background-image: none;
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .preview-document {
+    zoom: 1;
+  }
+
+  .preview-sheet {
+    min-height: auto;
+    padding: 28px 20px;
+  }
+
+  .preview-cover {
+    min-height: 70vh;
+    gap: 40px;
+  }
 }
 
 .article-body p {
@@ -179,10 +227,16 @@
 
 @page {
   size: A4;
-  margin: 20mm;
+  margin: 30mm 20mm 20mm 30mm;
 }
 
 @media print {
+  .editor-document,
+  .preview-document {
+    width: auto;
+    zoom: 1 !important;
+  }
+
   .article-page {
     width: auto;
     min-height: 0;
@@ -190,6 +244,10 @@
     background: none;
     box-shadow: none;
     zoom: 1 !important;
+  }
+
+  .preview-sheet {
+    padding: 0;
   }
 }
 

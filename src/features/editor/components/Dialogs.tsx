@@ -19,9 +19,9 @@ function Modal({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 print:hidden" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-1/2 z-50 w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-6 shadow-xl print:hidden"
+          className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[min(460px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-5 shadow-xl sm:p-6 print:hidden"
         >
-          <Dialog.Title className="text-base font-bold text-vince-primary">{title}</Dialog.Title>
+          <Dialog.Title className="text-lg font-extrabold text-vince-primary">{title}</Dialog.Title>
           <div className="mt-4 text-sm">{children}</div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -30,11 +30,11 @@ function Modal({
 }
 
 const inputClass =
-  'h-9 w-full rounded border border-vince-border px-3 text-sm outline-none focus:border-vince-primary';
+  'h-11 min-w-0 w-full rounded border border-vince-border px-3 text-base outline-none focus:border-vince-primary';
 const primaryBtn =
-  'h-9 rounded bg-vince-primary px-4 text-sm font-semibold text-white hover:bg-[#571424]';
+  'min-h-11 rounded bg-vince-primary px-4 py-2 text-sm font-semibold text-white hover:bg-[#571424]';
 const ghostBtn =
-  'h-9 rounded border border-vince-border px-4 text-sm text-vince-muted hover:bg-vince-tertiary';
+  'min-h-11 rounded border border-vince-border px-4 py-2 text-sm text-vince-muted hover:bg-vince-tertiary';
 
 export function LinkDialog({
   open,

@@ -29,6 +29,13 @@ export type TopBarActions = {
 
 type MenuName = 'File' | 'Edit' | 'Insert' | 'Review' | 'View';
 const menuNames: MenuName[] = ['File', 'Edit', 'Insert', 'Review', 'View'];
+const menuLabels: Record<MenuName, string> = {
+  File: 'Arquivo',
+  Edit: 'Editar',
+  Insert: 'Inserir',
+  Review: 'Revisão',
+  View: 'Exibir',
+};
 const zoomLevels = [50, 75, 100, 125, 150];
 
 export function EditorTopBar({
@@ -154,31 +161,34 @@ export function EditorTopBar({
   };
 
   return (
-    <header className="flex h-[50px] items-center gap-4 border-b border-vince-border bg-white px-5 print:hidden">
+    <header className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-vince-border bg-white px-3 py-3 sm:px-5 print:hidden">
       <a
         aria-label="Voltar"
-        className="inline-flex h-8 w-8 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary"
         href="/admin/artigos"
       >
         <EditorIcon className="h-4 w-4" name="arrowLeft" />
       </a>
 
-      <div className="min-w-0 leading-tight">
-        <div className="flex items-center gap-2">
-          <h1 className="max-w-[320px] truncate px-1 text-base font-bold text-vince-primary">
+      <div className="min-w-0 flex-1 basis-[220px] leading-tight">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h1 className="min-w-0 break-words px-1 text-base font-bold text-vince-primary">
             {title}
           </h1>
-          <span className="shrink-0 rounded-full bg-vince-primary px-2 py-0.5 text-[10px] font-medium text-white">
+          <span className="rounded-full bg-vince-primary px-2.5 py-1 text-xs font-medium text-white">
             {status}
           </span>
         </div>
-        <p className="flex items-center gap-1.5 px-1 text-[10px] text-vince-muted">
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 px-1 text-xs text-vince-muted">
           {team} <span>•</span>
           <EditorIcon className="h-3 w-3" name="cloud" /> {saveLabel}
         </p>
       </div>
 
-      <nav aria-label="Menu do editor" className="ml-2 flex items-center gap-1 text-xs">
+      <nav
+        aria-label="Menu do editor"
+        className="order-last flex w-full items-center gap-1 overflow-x-auto text-sm xl:order-none xl:w-auto"
+      >
         {menuNames
           .filter((name) => canEdit || (name !== 'Edit' && name !== 'Insert'))
           .map((name) => (
@@ -187,12 +197,12 @@ export function EditorTopBar({
                 <button
                   className={
                     active === name
-                      ? 'border-b-2 border-vince-primary px-3 py-[15px] font-bold text-vince-primary'
-                      : 'px-3 py-[15px] text-vince-muted hover:text-vince-primary'
+                      ? 'min-h-11 shrink-0 border-b-2 border-vince-primary px-3 py-2 font-bold text-vince-primary'
+                      : 'min-h-11 shrink-0 px-3 py-2 text-vince-muted hover:text-vince-primary'
                   }
                   type="button"
                 >
-                  {name}
+                  {menuLabels[name]}
                 </button>
               </MenuTrigger>
               <MenuContent>{items[name]}</MenuContent>
@@ -200,26 +210,26 @@ export function EditorTopBar({
           ))}
       </nav>
 
-      <div className="ml-auto flex items-center gap-5">
+      <div className="ml-auto flex max-w-full flex-wrap items-center gap-2">
         <button
           aria-label="Histórico de versões"
-          className="text-vince-muted hover:text-vince-primary"
+          className="inline-flex h-11 w-11 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary hover:text-vince-primary"
           onClick={actions.showHistory}
           type="button"
         >
           <EditorIcon className="h-4 w-4" name="history" />
         </button>
         <button
-          className="text-xs text-vince-muted hover:text-vince-primary"
+          className="min-h-11 rounded px-2 text-sm text-vince-muted hover:bg-vince-tertiary hover:text-vince-primary"
           onClick={actions.share}
           type="button"
         >
-          Share
+          Compartilhar
         </button>
         <Menu>
           <MenuTrigger asChild>
             <button
-              className="rounded bg-vince-primary px-4 py-2 text-xs font-semibold text-white hover:bg-[#571424]"
+              className="min-h-11 rounded bg-vince-primary px-4 py-2 text-sm font-semibold text-white hover:bg-[#571424]"
               type="button"
             >
               Exportar
@@ -237,7 +247,7 @@ export function EditorTopBar({
           <MenuTrigger asChild>
             <button
               aria-label="Configurações"
-              className="text-vince-muted hover:text-vince-primary"
+              className="inline-flex h-11 w-11 items-center justify-center rounded text-vince-muted hover:bg-vince-tertiary hover:text-vince-primary"
               type="button"
             >
               <EditorIcon className="h-4 w-4" name="settings" />

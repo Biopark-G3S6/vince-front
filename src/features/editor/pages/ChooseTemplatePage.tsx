@@ -1,54 +1,44 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+﻿import { useState, type FormEvent, type ReactNode } from 'react';
 
+import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 
-import { PersonaSwitch, useCurrentUser } from '@features/admin';
-import { getErrorCode } from '@shared/api/apiError';
-import { cn } from '@shared/lib/cn';
-import { ArrowLeftIcon, Button, StatusBadge } from '@shared/ui';
-
+import { PageScaffold, useCurrentUser } from '@features/admin';
 import {
-  useArticleTemplate,
-  useChangeEventTemplate,
-  useCreateEvent,
-  useSetTemplateActive,
-  useTemplates,
-} from '@features/articles';
-import { TemplateForm } from '../components/TemplateForm';
-import {
-  blankTemplate,
-  courseName,
-  courses,
+  articleHref,
   currentVersion,
-  isAvailableTo,
-  type EventScope,
+  useCreateArticle,
+  useEventRegistrations,
+  useTemplates,
+  type EventTemplate,
   type StoredTemplate,
   type TemplatePreview,
 } from '@features/articles';
+import { getErrorCode } from '@shared/api/apiError';
+import { cn } from '@shared/lib/cn';
+import { Button, Notice, UploadIcon } from '@shared/ui';
+
+import { TemplateForm } from '../components/TemplateForm';
 
 import '../article-editor.css';
 
-const scopeLabel: Record<EventScope, string> = {
-  class: 'Turma',
-  course: 'Curso',
-  institution: 'Instituição',
-};
-
-/** Mensagens dos códigos devolvidos pela API de templates. */
 const errorMessage: Record<string, string> = {
-  PERMISSION_DENIED: 'Você não tem permissão para esta ação neste escopo.',
-  RESOURCE_NOT_FOUND: 'O template não está disponível ao escopo do evento.',
-  TEMPLATE_ALREADY_FIXED:
-    'O template é escolhido na criação do evento e não pode ser trocado depois.',
-  VALIDATION_FAILED: 'Informe o nome antes de continuar.',
+  PERMISSION_DENIED: 'Você não tem permissão para esta ação.',
+  RESOURCE_NOT_FOUND: 'O modelo ou evento não está mais disponível.',
+  EVENT_REGISTRATION_REQUIRED: 'Inscreva-se no evento antes de criar o artigo.',
+  EVENT_TEAM_LIMIT_REACHED: 'O evento atingiu o limite de artigos e equipes.',
+  VALIDATION_FAILED: 'Confira o título do artigo e o modelo selecionado.',
 };
 
 const showError = (error: unknown) =>
   toast.error(errorMessage[getErrorCode(error)] ?? 'Não foi possível concluir a ação.');
 
-function Lines({ count, className }: { count: number; className?: string }) {
+const fieldClass =
+  'h-11 min-w-0 w-full rounded-lg border border-vince-border bg-white px-3 text-base text-vince-text focus:border-vince-primary';
+
+function Lines({ count }: { count: number }) {
   return (
-    <div className={cn('space-y-[3px]', className)}>
+    <div className="space-y-[3px]">
       {Array.from({ length: count }, (_, i) => (
         <div
           className="h-[2px] rounded bg-[#c9c3c4]"
@@ -61,415 +51,460 @@ function Lines({ count, className }: { count: number; className?: string }) {
 }
 
 function Preview({ kind }: { kind: TemplatePreview | 'blank' }) {
-  const bg =
-    kind === 'official' ? 'bg-[#dcd8d8]' : kind === 'abnt' ? 'bg-[#eceaea]' : 'bg-[#dedcdb]';
-
   return (
-    <div className={cn('flex h-[146px] items-start justify-center overflow-hidden', bg)}>
-      {kind === 'blank' && <div className="mt-2 h-[170px] w-[120px] bg-white shadow" />}
-      {kind === 'official' && (
-        <div className="mt-2 flex h-[170px] w-[120px] flex-col items-center gap-3 bg-white p-3 shadow">
-          <div className="h-[3px] w-16 rounded bg-[#999]" />
-          <div className="mt-4 w-full space-y-[3px]">
-            <div className="mx-auto h-[4px] w-20 rounded bg-[#333]" />
-            <div className="mx-auto h-[4px] w-16 rounded bg-[#333]" />
-          </div>
-          <div className="h-[2px] w-12 rounded bg-[#aaa]" />
-          <div className="mt-6 h-[2px] w-16 rounded bg-[#aaa]" />
-        </div>
-      )}
-      {kind === 'abnt' && (
-        <div className="mt-2 w-[130px] bg-white p-2 shadow">
-          <div className="mx-auto mb-2 h-[3px] w-12 rounded bg-[#999]" />
-          <div className="grid grid-cols-2 gap-2">
-            <Lines count={14} />
-            <Lines count={14} />
-          </div>
-        </div>
-      )}
-      {kind === 'academic' && (
-        <div className="mt-4 w-[170px] rounded-sm bg-white p-2 shadow">
-          <div className="mx-auto mb-2 h-[3px] w-24 rounded bg-vince-secondary" />
-          <div className="grid grid-cols-2 gap-2">
-            <Lines count={12} />
-            <Lines count={12} />
-          </div>
-        </div>
-      )}
+    <div className="flex h-40 items-start justify-center overflow-hidden bg-[#eceaea]">
+      <div className="mt-3 min-h-40 w-32 bg-white p-3 shadow">
+        {kind !== 'blank' && (
+          <>
+            <div className="mx-auto mb-4 mt-3 h-[4px] w-20 rounded bg-vince-primary" />
+            <div className={cn('gap-2', kind === 'abnt' && 'grid grid-cols-2')}>
+              <Lines count={13} />
+              {kind === 'abnt' && <Lines count={13} />}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-type CardProps = {
-  action?: ReactNode;
-  badges?: ReactNode;
-  description: string;
-  highlighted?: boolean;
-  preview: TemplatePreview | 'blank';
-  title: string;
-};
-
-function TemplateCard({ action, badges, description, highlighted, preview, title }: CardProps) {
+function Pill({ children }: { children: ReactNode }) {
   return (
-    <article
-      className={cn(
-        'relative flex flex-col overflow-hidden rounded-lg border bg-white',
-        highlighted ? 'border-2 border-vince-primary' : 'border-vince-border',
-      )}
-    >
-      <div className="relative">
-        {badges && <div className="absolute left-2 top-2 z-10 flex flex-wrap gap-1">{badges}</div>}
-        <Preview kind={preview} />
-      </div>
-      <div className="flex flex-1 flex-col p-4">
-        <h3 className="min-h-[44px] text-sm font-bold leading-snug">{title}</h3>
-        <p className="mt-1 min-h-[34px] flex-1 text-[11px] leading-snug text-vince-muted">
-          {description}
-        </p>
-        {action}
-      </div>
-    </article>
-  );
-}
-
-function Pill({ children, tone = 'primary' }: { children: ReactNode; tone?: 'primary' | 'soft' }) {
-  return (
-    <span
-      className={cn(
-        'rounded-full px-2 py-0.5 text-[10px] font-medium',
-        tone === 'primary' ? 'bg-vince-primary text-white' : 'bg-[#ff8fa6] text-vince-primary',
-      )}
-    >
+    <span className="inline-flex rounded-full bg-vince-tertiary px-3 py-1 text-xs font-semibold text-vince-primary">
       {children}
     </span>
   );
 }
 
-const useButtonClass =
-  'mt-4 h-[26px] rounded border border-vince-primary bg-white text-[11px] font-medium text-vince-primary transition-colors hover:bg-vince-tertiary disabled:opacity-50';
+type TemplateCardProps = {
+  template: StoredTemplate;
+  event?: EventTemplate;
+  onChoose: () => void;
+  onEdit: () => void;
+};
 
-/** RF-TPL-001 e RF-TPL-002 — Templates de artigo e a sua seleção pelo evento. */
+function TemplateCard({ template, event, onChoose, onEdit }: TemplateCardProps) {
+  const version =
+    event?.templateId === template.id
+      ? (event.templateVersion ?? currentVersion(template).number)
+      : currentVersion(template).number;
+
+  return (
+    <article className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-vince-border bg-white shadow-sm">
+      <Preview kind={template.preview} />
+      <div className="flex flex-1 flex-col p-5">
+        <div className="mb-3 flex flex-wrap gap-2">
+          <Pill>
+            {event
+              ? `Versão ${version}`
+              : template.visibility === 'standard'
+                ? 'Padrão'
+                : 'Pessoal'}
+          </Pill>
+          {event && (
+            <Pill>
+              {event.kind === 'practice' ? 'Teste' : event.kind === 'tcc' ? 'TCC' : 'Oficial'}
+            </Pill>
+          )}
+        </div>
+        <h3 className="text-lg font-extrabold leading-snug">{template.title}</h3>
+        {event && <p className="mt-1 text-sm font-semibold text-vince-primary">{event.name}</p>}
+        <p className="mt-2 flex-1 text-sm leading-6 text-vince-muted">{template.description}</p>
+        <Button className="mt-5 w-full" onClick={onChoose} variant="outline">
+          Usar este modelo
+        </Button>
+        {template.canMaintain && template.visibility !== 'standard' && (
+          <Button className="mt-2" onClick={onEdit} size="sm" variant="ghost">
+            Editar modelo
+          </Button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+type Selection = { template: StoredTemplate | null; eventId?: string };
+
 export function ChooseTemplatePage() {
   const user = useCurrentUser();
 
   return (
-    <div className="min-h-screen bg-vince-surface px-4 text-vince-text">
-      <header className="relative mx-auto flex h-[88px] max-w-[1000px] items-center justify-center">
+    <PageScaffold
+      activeSection="templates"
+      title="Modelos de artigo"
+      eyebrow="Biblioteca de modelos"
+      description="Escolha um modelo padrão, use o modelo de um evento ou importe o seu para começar um novo artigo."
+      personaRoles={['institutionAdmin', 'coordinator', 'advisor', 'student']}
+      actions={
         <a
-          className="absolute left-0 flex items-center gap-2 text-xs text-vince-muted hover:text-vince-primary"
+          className="inline-flex min-h-11 items-center rounded-lg border border-vince-border bg-white px-4 py-2 text-sm font-semibold text-vince-primary hover:bg-vince-tertiary"
           href="/admin/eventos"
         >
-          <ArrowLeftIcon className="h-4 w-4" /> Voltar
+          Eventos e inscrições
         </a>
-        <p className="text-sm font-semibold text-vince-primary">VinceArt</p>
-      </header>
-
-      <main className="mx-auto max-w-[1000px] pb-16">
-        <PersonaSwitch
-          className="mt-0"
-          roles={['institutionAdmin', 'coordinator', 'advisor', 'student']}
-        />
-        {user.role === 'student' ? <StudentView /> : <CreatorView key={user.id} />}
-      </main>
-    </div>
+      }
+    >
+      <TemplateLibrary key={user.id} />
+    </PageScaffold>
   );
 }
 
-/** A equipe não escolhe o template: ele vem do evento, definido na sua criação. */
-function StudentView() {
-  const article = useArticleTemplate();
-
-  if (!article.data) {
-    return null;
-  }
-
-  const { template, version } = article.data;
-
-  return (
-    <>
-      <h1 className="mt-10 text-center text-2xl font-bold text-vince-primary">
-        Modelo do seu artigo
-      </h1>
-      <p className="mt-3 text-center text-xs text-vince-muted">
-        O modelo é escolhido por quem cria o evento e vale para todas as equipes. Ele é o ponto de
-        partida do artigo; o que se verifica ao longo do ciclo é a norma (ABNT).
-      </p>
-      <div className="mx-auto mt-10 max-w-[320px]">
-        <TemplateCard
-          action={
-            <a
-              className={cn(useButtonClass, 'flex items-center justify-center')}
-              href="/artigos/editor"
-            >
-              Abrir o artigo
-            </a>
-          }
-          badges={<Pill>Modelo do evento{version ? ` · versão ${version}` : ''}</Pill>}
-          description={template.description}
-          highlighted
-          preview={template.id === blankTemplate.id ? 'blank' : 'official'}
-          title={template.title}
-        />
-      </div>
-    </>
-  );
-}
-
-function CreatorView() {
+function TemplateLibrary() {
   const user = useCurrentUser();
-  const { data } = useTemplates();
-  const createEvent = useCreateEvent();
-  const changeTemplate = useChangeEventTemplate();
-  const setActive = useSetTemplateActive();
-  const [eventName, setEventName] = useState('');
-  const [scope, setScope] = useState<EventScope>();
-  const [courseId, setCourseId] = useState(courses[0]!.id);
-  const [editing, setEditing] = useState<StoredTemplate | 'new' | null>(null);
+  const query = useTemplates();
+  const registrations = useEventRegistrations();
+  const [editing, setEditing] = useState<StoredTemplate | 'new' | 'import' | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const contextId = new URLSearchParams(window.location.search).get('evento') ?? undefined;
 
-  if (!data) {
-    return null;
-  }
-
-  const { events, scopes, templates } = data;
-  const eventScope = scope && scopes.includes(scope) ? scope : scopes[0]!;
-  const eventCourseId = eventScope === 'institution' ? null : courseId;
-  // O sistema apresenta os templates disponíveis ao escopo do evento e a opção "em branco".
-  const available = templates.filter((template) => isAvailableTo(template, eventCourseId));
-  const canMaintainAny = user.role !== 'advisor';
-
-  const choose = (templateId: string | null) =>
-    createEvent.mutate(
-      { courseId: eventCourseId, name: eventName, scope: eventScope, templateId },
-      {
-        onError: showError,
-        onSuccess: () => {
-          toast.success('Evento criado. O modelo ficou definido para as equipes do evento.', {
-            action: {
-              label: 'Criar equipe',
-              onClick: () => window.location.assign('/admin/equipes'),
-            },
-          });
-          setEventName('');
-        },
-      },
+  if (query.isError) {
+    return (
+      <Notice className="mt-6" tone="danger">
+        Não foi possível carregar os modelos.{' '}
+        <Button onClick={() => void query.refetch()} variant="outline">
+          Tentar novamente
+        </Button>
+      </Notice>
     );
+  }
+  if (!query.data)
+    return (
+      <p className="mt-6 text-vince-muted" role="status">
+        Carregando modelos e eventos…
+      </p>
+    );
+
+  const { events, templates } = query.data;
+  const contextEvent = events.find((event) => event.id === contextId);
+  const standard = templates.filter(
+    (template) => template.active && template.visibility === 'standard',
+  );
+  const personal = templates.filter(
+    (template) => template.visibility === 'personal' && template.ownerId === user.id,
+  );
+  const eventModels = events.flatMap((event) =>
+    templates
+      .filter(
+        (template) =>
+          (template.active || template.id === event.templateId) &&
+          (template.visibility === 'event'
+            ? template.eventId === event.id
+            : template.id === event.templateId),
+      )
+      .map((template) => ({ event, template })),
+  );
+  const official = eventModels.filter(({ event }) => !event.kind || event.kind === 'official');
+  const independent = eventModels.filter(
+    ({ event }) => event.kind === 'practice' || event.kind === 'tcc',
+  );
+  const editableEvents = events.filter((event) => event.canManage);
+  const contextRegistered = registrations.data?.some(
+    (entry) => entry.eventId === contextId && entry.studentId === user.id,
+  );
 
   if (editing) {
     return (
       <TemplateForm
+        events={editableEvents}
+        importMode={editing === 'import'}
+        initialEventId={
+          contextEvent && editableEvents.some((event) => event.id === contextId)
+            ? contextId
+            : undefined
+        }
         onClose={() => setEditing(null)}
         onError={showError}
-        template={editing === 'new' ? null : editing}
+        template={typeof editing === 'string' ? null : editing}
       />
     );
   }
 
-  const fieldClass =
-    'h-9 rounded border border-vince-border bg-white px-2 text-xs text-vince-text focus:border-vince-primary';
-
-  return (
-    <>
-      <h1 className="mt-10 text-center text-2xl font-bold text-vince-primary">
-        Escolha o modelo do evento
-      </h1>
-      <p className="mt-3 text-center text-xs text-vince-muted">
-        O modelo é escolhido na criação do evento e serve de ponto de partida aos artigos das
-        equipes. Depois de criado o evento, a escolha não pode ser trocada.
-      </p>
-
-      <form
-        className="mt-8 flex flex-wrap items-end justify-center gap-3"
-        onSubmit={(event: FormEvent) => event.preventDefault()}
-      >
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-vince-muted">
-          Nome do evento
-          <input
-            className={cn(fieldClass, 'w-64')}
-            onChange={(event) => setEventName(event.target.value)}
-            placeholder="Simpósio de Pesquisa 2027"
-            value={eventName}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-vince-muted">
-          Escopo
-          <select
-            className={fieldClass}
-            onChange={(event) => setScope(event.target.value as EventScope)}
-            value={eventScope}
-          >
-            {scopes.map((option) => (
-              <option key={option} value={option}>
-                {scopeLabel[option]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {eventScope !== 'institution' && (
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-vince-muted">
-            Curso
-            <select
-              className={fieldClass}
-              onChange={(event) => setCourseId(event.target.value)}
-              value={courseId}
-            >
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </form>
-
-      <div className="mt-8 grid gap-5 md:grid-cols-3">
-        {available.map((template) => (
+  function cards(items: Array<{ template: StoredTemplate; event?: EventTemplate }>) {
+    return (
+      <div className="mt-5 grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+        {items.map(({ template, event }) => (
           <TemplateCard
-            action={
-              <button
-                className={useButtonClass}
-                disabled={createEvent.isPending}
-                onClick={() => choose(template.id)}
-                type="button"
-              >
-                Usar este modelo
-              </button>
-            }
-            badges={
-              <>
-                {template.recommended && <Pill tone="soft">Recomendado</Pill>}
-                <Pill>
-                  {template.courseId ? courseName(template.courseId) : 'Instituição'} · v
-                  {currentVersion(template).number}
-                </Pill>
-              </>
-            }
-            description={template.description}
-            key={template.id}
-            preview={template.preview}
-            title={template.title}
+            event={event}
+            key={`${event?.id ?? 'personal'}-${template.id}`}
+            onChoose={() => setSelection({ eventId: event?.id ?? contextEvent?.id, template })}
+            onEdit={() => setEditing(template)}
+            template={template}
           />
         ))}
-        <TemplateCard
-          action={
-            <button
-              className={useButtonClass}
-              disabled={createEvent.isPending}
-              onClick={() => choose(null)}
-              type="button"
-            >
-              Começar em branco
-            </button>
-          }
-          description={blankTemplate.description}
-          preview="blank"
-          title={blankTemplate.title}
-        />
       </div>
+    );
+  }
 
-      <section className="mt-12">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-vince-text">Eventos e modelos definidos</h2>
-          <a className="text-xs font-semibold text-vince-primary underline" href="/admin/equipes">
-            Criar equipe em um evento →
-          </a>
-        </div>
-        <div className="mt-3 overflow-x-auto rounded-lg border border-vince-border bg-white">
-          <table className="w-full min-w-[640px] text-left text-xs">
-            <thead className="bg-vince-surface text-vince-muted">
-              <tr>
-                <th className="px-4 py-2 font-semibold">Evento</th>
-                <th className="px-4 py-2 font-semibold">Escopo</th>
-                <th className="px-4 py-2 font-semibold">Modelo congelado</th>
-                <th className="px-4 py-2 font-semibold">Criado por</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-vince-border">
-              {events.map((event) => (
-                <tr key={event.id}>
-                  <td className="px-4 py-3 font-semibold">{event.name}</td>
-                  <td className="px-4 py-3 text-vince-muted">
-                    {scopeLabel[event.scope]}
-                    {event.courseId ? ` · ${courseName(event.courseId)}` : ''}
-                  </td>
-                  <td className="px-4 py-3">
-                    {event.templateTitle}
-                    {event.templateVersion ? ` · versão ${event.templateVersion}` : ''}
-                  </td>
-                  <td className="px-4 py-3 text-vince-muted">{event.createdBy}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      className="font-semibold text-vince-primary hover:underline"
-                      onClick={() => changeTemplate.mutate(event.id, { onError: showError })}
-                      type="button"
-                    >
-                      Trocar modelo
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="mt-12">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+  return (
+    <div className="min-w-0 space-y-10 py-6">
+      {contextEvent && (
+        <Notice tone={user.role === 'student' && !contextRegistered ? 'warning' : 'info'}>
+          <p className="font-bold">Artigo para {contextEvent.name}</p>
+          <p className="mt-1">
+            {user.role === 'student' && !contextRegistered
+              ? 'Faça sua inscrição no evento para criar e vincular um artigo.'
+              : 'O novo artigo será vinculado a este evento.'}{' '}
+            <a className="font-semibold underline" href="/admin/eventos">
+              Ver evento e inscrição
+            </a>
+          </p>
+        </Notice>
+      )}
+      {contextId && !contextEvent && (
+        <Notice tone="warning">
+          O evento informado não está disponível para o seu perfil. Consulte os eventos e
+          inscrições.
+        </Notice>
+      )}
+      <section aria-labelledby="standard-models-title">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-vince-text">Templates da instituição</h2>
-            <p className="mt-1 text-xs text-vince-muted">
-              {canMaintainAny
-                ? 'Alterar um template gera versão nova; o evento já criado permanece na versão que selecionou.'
-                : 'O professor não mantém templates: apenas seleciona, ao criar evento de turma.'}
+            <h2 className="text-2xl font-extrabold text-vince-text" id="standard-models-title">
+              Modelos padrão
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-vince-muted">
+              Comece um artigo científico ou resumo expandido com as seções iniciais prontas.
             </p>
           </div>
-          {canMaintainAny && (
-            <Button onClick={() => setEditing('new')} size="sm">
-              Novo template
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={() => setEditing('new')} variant="outline">
+              Criar modelo
             </Button>
-          )}
+            <Button onClick={() => setEditing('import')}>
+              <UploadIcon className="h-4 w-4" />
+              Importar modelo
+            </Button>
+          </div>
         </div>
-
-        <ul className="mt-3 divide-y divide-vince-border rounded-lg border border-vince-border bg-white">
-          {templates.map((template) => (
-            <li className="flex flex-wrap items-center gap-3 px-4 py-3" key={template.id}>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold">{template.title}</p>
-                <p className="text-[11px] text-vince-muted">
-                  {template.courseId
-                    ? `Restrito ao curso de ${courseName(template.courseId)}`
-                    : 'Toda a instituição'}
-                  {' · '}versão {currentVersion(template).number} de{' '}
-                  {currentVersion(template).createdBy}
-                </p>
-              </div>
-              <StatusBadge
-                label={template.active ? 'Ativo' : 'Inativo'}
-                tone={template.active ? 'success' : 'muted'}
-              />
-              <Button onClick={() => setEditing(template)} size="sm" variant="outline">
-                {template.canMaintain ? 'Alterar' : 'Consultar'}
-              </Button>
-              {template.canMaintain && (
-                <Button
-                  disabled={setActive.isPending}
-                  onClick={() =>
-                    setActive.mutate(
-                      { active: !template.active, templateId: template.id },
-                      { onError: showError },
-                    )
-                  }
-                  size="sm"
-                  variant="ghost"
-                >
-                  {template.active ? 'Desativar' : 'Reativar'}
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
+        {cards(standard.map((template) => ({ template })))}
       </section>
-    </>
+      <section aria-labelledby="event-models-title">
+        <h2 className="text-xl font-extrabold text-vince-text" id="event-models-title">
+          Modelos oficiais dos eventos
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-vince-muted">
+          Modelos publicados por professores e coordenadores. Ao escolher, o artigo fica vinculado
+          ao evento correspondente.
+        </p>
+        {official.length ? (
+          cards(official)
+        ) : (
+          <p className="mt-4 rounded-lg border border-dashed border-vince-border p-5 text-sm text-vince-muted">
+            Nenhum modelo oficial foi publicado para os eventos disponíveis.
+          </p>
+        )}
+      </section>
+      {independent.length > 0 && (
+        <section aria-labelledby="independent-models-title">
+          <h2 className="text-xl font-extrabold text-vince-text" id="independent-models-title">
+            Modelos de teste e TCC
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-vince-muted">
+            Modelos dos espaços independentes organizados pelos professores.
+          </p>
+          {cards(independent)}
+        </section>
+      )}
+      <section aria-labelledby="personal-models-title">
+        <h2 className="text-xl font-extrabold text-vince-text" id="personal-models-title">
+          Meus modelos
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-vince-muted">
+          Os modelos que você criou ou importou ficam disponíveis para reutilizar em novos artigos.
+        </p>
+        {personal.length ? (
+          cards(personal.map((template) => ({ template })))
+        ) : (
+          <div className="mt-4 rounded-lg border border-dashed border-vince-border bg-white p-5">
+            <p className="text-sm leading-6 text-vince-muted">
+              Você ainda não tem modelos pessoais. Importe um arquivo Word (.docx) de até 10 MB ou
+              crie um modelo no editor.
+            </p>
+            <Button
+              className="mt-3"
+              onClick={() => setEditing('import')}
+              size="sm"
+              variant="outline"
+            >
+              Importar meu primeiro modelo
+            </Button>
+          </div>
+        )}
+      </section>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-vince-border bg-white p-5">
+        <div>
+          <h2 className="font-bold text-vince-text">Prefere começar em branco?</h2>
+          <p className="mt-1 text-sm text-vince-muted">
+            Crie um documento vazio e organize o conteúdo no editor.
+          </p>
+        </div>
+        <Button
+          onClick={() => setSelection({ eventId: contextEvent?.id, template: null })}
+          variant="outline"
+        >
+          Começar em branco
+        </Button>
+      </div>
+      {selection && (
+        <CreateArticleDialog
+          events={events}
+          onClose={() => setSelection(null)}
+          registrationEventIds={
+            registrations.data
+              ?.filter((entry) => entry.studentId === user.id)
+              .map((entry) => entry.eventId) ?? []
+          }
+          registrationsLoading={registrations.isPending}
+          registrationsError={registrations.isError}
+          selection={selection}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateArticleDialog({
+  events,
+  onClose,
+  registrationEventIds,
+  registrationsLoading,
+  registrationsError,
+  selection,
+}: {
+  events: EventTemplate[];
+  onClose: () => void;
+  registrationEventIds: string[];
+  registrationsLoading: boolean;
+  registrationsError: boolean;
+  selection: Selection;
+}) {
+  const user = useCurrentUser();
+  const createArticle = useCreateArticle();
+  const [title, setTitle] = useState('');
+  const [eventId, setEventId] = useState(selection.eventId ?? '');
+  const isEventModel =
+    selection.template?.visibility === 'event' ||
+    Boolean(
+      selection.eventId &&
+      events.some(
+        (event) => event.id === selection.eventId && event.templateId === selection.template?.id,
+      ),
+    );
+  const needsRegistration =
+    user.role === 'student' && Boolean(eventId) && !registrationEventIds.includes(eventId);
+  const checkingRegistration =
+    user.role === 'student' && Boolean(eventId) && (registrationsLoading || registrationsError);
+  const cannotManageEvent =
+    user.role !== 'student' &&
+    Boolean(eventId) &&
+    !events.find((event) => event.id === eventId)?.canManage;
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (needsRegistration || checkingRegistration || cannotManageEvent || createArticle.isPending)
+      return;
+    createArticle.mutate(
+      {
+        eventId: eventId || undefined,
+        templateId: selection.template?.id ?? null,
+        title: title.trim(),
+      },
+      {
+        onError: showError,
+        onSuccess: (article) => {
+          toast.success('Artigo criado com o modelo escolhido.');
+          window.location.assign(articleHref('/artigos/editor', article.id));
+        },
+      },
+    );
+  }
+
+  return (
+    <Dialog.Root onOpenChange={(open) => !open && !createArticle.isPending && onClose()} open>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-[#24151a]/45 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92dvh] w-[min(94vw,560px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-vince-border bg-white p-6 shadow-2xl sm:p-8">
+          <Dialog.Title className="text-2xl font-extrabold text-vince-text">
+            Novo artigo
+          </Dialog.Title>
+          <Dialog.Description className="mt-2 text-sm leading-6 text-vince-muted">
+            Modelo escolhido: {selection.template?.title ?? 'Documento em branco'}. Dê um título
+            para abrir seu novo artigo no editor.
+          </Dialog.Description>
+          <form className="mt-6 space-y-5" onSubmit={submit}>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-vince-muted">
+              Título do artigo
+              <input
+                autoFocus
+                className={fieldClass}
+                maxLength={200}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Digite o título do seu artigo"
+                required
+                value={title}
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-vince-muted">
+              Evento
+              <select
+                className={fieldClass}
+                disabled={isEventModel}
+                onChange={(event) => setEventId(event.target.value)}
+                value={eventId}
+              >
+                <option value="">Artigo independente (sem evento)</option>
+                {events.map((event) => (
+                  <option
+                    disabled={user.role !== 'student' && !event.canManage}
+                    key={event.id}
+                    value={event.id}
+                  >
+                    {event.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {needsRegistration && !registrationsLoading && !registrationsError && (
+              <Notice tone="warning">
+                Você precisa se inscrever neste evento antes de criar o artigo.{' '}
+                <a className="font-semibold underline" href="/admin/eventos">
+                  Ir para eventos e inscrições
+                </a>
+              </Notice>
+            )}
+            {checkingRegistration && (
+              <Notice tone={registrationsError ? 'danger' : 'info'}>
+                {registrationsError
+                  ? 'Não foi possível verificar sua inscrição. Atualize a página para tentar novamente.'
+                  : 'Verificando sua inscrição no evento…'}
+              </Notice>
+            )}
+            {cannotManageEvent && (
+              <Notice tone="warning">
+                Apenas professores vinculados e responsáveis pelo evento podem criar artigos neste
+                contexto. Escolha um evento que você organiza para continuar.
+              </Notice>
+            )}
+            <div className="flex flex-wrap justify-end gap-3 pt-2">
+              <Button disabled={createArticle.isPending} onClick={onClose} variant="outline">
+                Cancelar
+              </Button>
+              <Button
+                disabled={
+                  !title.trim() ||
+                  needsRegistration ||
+                  checkingRegistration ||
+                  cannotManageEvent ||
+                  createArticle.isPending
+                }
+                type="submit"
+              >
+                {createArticle.isPending ? 'Criando…' : 'Criar artigo'}
+              </Button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

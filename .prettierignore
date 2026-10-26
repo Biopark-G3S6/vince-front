@@ -1,5 +1,10 @@
 dist
 node_modules
+.pnpm-store
 coverage
 docs
 pnpm-lock.yaml
+playwright-report
+test-results
+tmp
+src/app/routeTree.gen.ts

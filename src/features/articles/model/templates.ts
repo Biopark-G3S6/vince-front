@@ -22,6 +22,7 @@ export type ArticleTemplate = TemplateFormat & {
 /** Alterar um template gera versão nova; as anteriores são preservadas (RF-TPL-001 RN4). */
 export type TemplateVersion = {
   content: JSONContent;
+  format?: TemplateFormat;
   createdAt: string;
   createdBy: string;
   number: number;
@@ -29,6 +30,10 @@ export type TemplateVersion = {
 
 export type StoredTemplate = ArticleTemplate & {
   active: boolean;
+  ownerId?: string;
+  visibility?: 'standard' | 'personal' | 'event';
+  /** Evento em que o modelo foi publicado. */
+  eventId?: string;
   /** Presente quando quem consulta pode manter o template (RF-TPL-001 RN2). */
   canMaintain?: boolean;
   /** Curso ao qual o template fica restrito; `null` quando vale para a instituição. */
@@ -41,6 +46,14 @@ export type EventScope = 'institution' | 'course' | 'class';
 
 /** O evento congela a versão do template selecionada na sua criação (RF-TPL-002 RN3). */
 export type EventTemplate = {
+  /** Permissão derivada para o perfil que consulta o evento. */
+  canManage?: boolean;
+  kind?: 'official' | 'practice' | 'tcc';
+  createdById?: string;
+  description?: string;
+  registrationOpen?: boolean;
+  registrationDeadline?: string | null;
+  maxTeamSize?: number;
   courseId: string | null;
   createdBy: string;
   id: string;

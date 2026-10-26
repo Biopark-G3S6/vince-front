@@ -1,4 +1,10 @@
-import { DEMO_ARTICLE_ID, readArticles, type Article } from '@features/articles';
+import {
+  canReadArticle,
+  DEMO_ARTICLE_ID,
+  listEvents,
+  readArticles,
+  type Article,
+} from '@features/articles';
 import { countMessagesByAuthor } from '@features/discussion';
 import { findMilestone, isPending, readCycleOf } from '@features/review';
 import { ApiError } from '@shared/api/apiError';
@@ -172,6 +178,7 @@ function registeredTeam(article: Article): TeamProgress {
   }
 
   return {
+    articleId: article.id,
     advisor: article.advisor.name,
     advisorId: article.advisor.id,
     articleStatus: cycle.status,
@@ -198,16 +205,21 @@ function registeredTeam(article: Article): TeamProgress {
   };
 }
 
-async function allTeams(): Promise<TeamWithSignals[]> {
+async function allTeams(actorId: string): Promise<TeamWithSignals[]> {
   const now = new Date();
-  const teams = [...readArticles().map(registeredTeam), ...otherTeams];
+  const teams = [
+    ...readArticles()
+      .filter((article) => canReadArticle(actorId, article))
+      .map(registeredTeam),
+    ...otherTeams,
+  ];
 
   return teams.map((team) => ({ ...team, signals: evaluateRiskSignals(team, now) }));
 }
 
 /** RF-ACP-001 — Apenas as equipes de que o ator é orientador responsável (RN1). */
 export async function listAdvisorTeams(actorId: string) {
-  return (await allTeams()).filter((team) => team.advisorId === actorId);
+  return (await allTeams(actorId)).filter((team) => team.advisorId === actorId);
 }
 
 /** RF-ACP-002 — Eventos do curso do coordenador, com o andamento agregado. */
@@ -216,9 +228,14 @@ export async function listCourseEvents(actorId: string): Promise<CourseEvent[]> 
     throw new ApiError('PERMISSION_DENIED');
   }
 
-  const teams = await allTeams();
+  const teams = await allTeams(actorId);
+  const officialEvents = await listEvents(actorId);
+  const courseEvents = [
+    ...officialEvents,
+    ...events.filter((event) => !officialEvents.some((current) => current.id === event.id)),
+  ];
 
-  return events.map((event) => {
+  return courseEvents.map((event) => {
     const eventTeams = teams.filter((team) => team.eventId === event.id);
 
     return {
@@ -262,7 +279,7 @@ const contributionSeeds: Record<string, Omit<TeamContribution, 'teamId' | 'teamN
 
 /** RF-ACP-004 — Contribuição de cada integrante, restrita ao orientador responsável. */
 export async function getContribution(actorId: string, teamId: string): Promise<TeamContribution> {
-  const team = (await allTeams()).find((candidate) => candidate.id === teamId);
+  const team = (await allTeams(actorId)).find((candidate) => candidate.id === teamId);
 
   if (!team) {
     throw new ApiError('RESOURCE_NOT_FOUND');
@@ -347,13 +364,18 @@ export async function generateReport(
   const base = { course: course.name, generatedAt: new Date().toISOString(), period };
 
   if (courseId === 'course-adm' && period === '2026.2') {
-    const teams = await allTeams();
+    const teams = await allTeams(actorId);
+    const officialEvents = await listEvents(actorId);
+    const courseEvents = [
+      ...officialEvents,
+      ...events.filter((event) => !officialEvents.some((current) => current.id === event.id)),
+    ];
 
     return {
       ...base,
       articleGradeAverage: 8.4,
       concluded: teams.filter((team) => team.articleStatus === 'FINISHED').length,
-      events: events.map((event) => ({
+      events: courseEvents.map((event) => ({
         name: event.name,
         teams: teams.filter((team) => team.eventId === event.id).length,
       })),

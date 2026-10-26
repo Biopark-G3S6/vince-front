@@ -1,10 +1,16 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { toast } from 'sonner';
 
-import { Button, TrashIcon } from '@shared/ui';
+import { Button, ConfirmDialog, TrashIcon } from '@shared/ui';
 
-import { makeInitials, type Institution, type InstitutionAdmin } from '../model/institution';
+import {
+  makeInitials,
+  validateInstitution,
+  type Institution,
+  type InstitutionAdmin,
+} from '../model/institution';
 
 type InstitutionDetailsDialogProps = {
   institution: Institution | null;
@@ -39,11 +45,16 @@ export function InstitutionDetailsDialog({
   const [form, setForm] = useState<InstitutionForm>(emptyForm);
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const loadedInstitutionId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!institution) {
+      loadedInstitutionId.current = null;
       return;
     }
+    if (loadedInstitutionId.current === institution.id) return;
+    loadedInstitutionId.current = institution.id;
 
     setForm({
       name: institution.name,
@@ -56,6 +67,7 @@ export function InstitutionDetailsDialog({
     });
     setAdminName('');
     setAdminEmail('');
+    setConfirmDeactivate(false);
   }, [institution]);
 
   if (!institution) {
@@ -71,6 +83,12 @@ export function InstitutionDetailsDialog({
   function saveInstitution(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const validationError = validateInstitution(form);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     onUpdate({
       ...currentInstitution,
       name: form.name.trim(),
@@ -81,21 +99,22 @@ export function InstitutionDetailsDialog({
       city: form.city.trim(),
       state: form.state.trim().toUpperCase(),
     });
+    toast.success('Dados da instituição atualizados.');
   }
 
   function assignAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!adminName.trim() || !adminEmail.trim()) {
+      toast.error('Informe o nome e o e-mail do administrador.');
       return;
     }
 
     const email = adminEmail.trim().toLowerCase();
-    const exists = currentInstitution.admins.some((admin) => admin.email === email);
+    const exists = currentInstitution.admins.some((admin) => admin.email.toLowerCase() === email);
 
     if (exists) {
-      setAdminName('');
-      setAdminEmail('');
+      toast.error('Este administrador já está vinculado à instituição.');
       return;
     }
 
@@ -110,6 +129,7 @@ export function InstitutionDetailsDialog({
     onUpdate({ ...currentInstitution, admins: [...currentInstitution.admins, newAdmin] });
     setAdminName('');
     setAdminEmail('');
+    toast.success('Administrador designado.');
   }
 
   function revokeAdmin(adminId: string) {
@@ -117,6 +137,7 @@ export function InstitutionDetailsDialog({
       ...currentInstitution,
       admins: currentInstitution.admins.filter((admin) => admin.id !== adminId),
     });
+    toast.success('Vínculo do administrador revogado.');
   }
 
   const inactive = currentInstitution.status === 'inactive';
@@ -135,7 +156,7 @@ export function InstitutionDetailsDialog({
         <Dialog.Content
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="fixed right-0 top-0 z-50 h-dvh w-[min(96vw,760px)] overflow-y-auto border-l border-vince-border bg-white p-8 shadow-2xl"
+          className="fixed right-0 top-0 z-50 h-dvh w-[min(100vw,760px)] overflow-y-auto border-l border-vince-border bg-white p-5 shadow-2xl sm:p-8"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -244,11 +265,11 @@ export function InstitutionDetailsDialog({
                     className="flex flex-col gap-3 rounded-lg border border-[#ead9dd] bg-[#fffafa] p-4 sm:flex-row sm:items-center sm:justify-between"
                     key={admin.id}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-vince-primary text-sm font-bold text-white">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-vince-primary text-sm font-bold text-white">
                         {admin.initials}
                       </span>
-                      <div>
+                      <div className="min-w-0 break-words">
                         <p className="font-semibold text-vince-text">{admin.name}</p>
                         <p className="text-sm text-vince-muted">{admin.email}</p>
                       </div>
@@ -272,9 +293,23 @@ export function InstitutionDetailsDialog({
               )}
             </div>
 
-            <form className="mt-5 grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={assignAdmin}>
-              <Field label="Nome" onChange={setAdminName} value={adminName} />
-              <Field label="E-mail" onChange={setAdminEmail} type="email" value={adminEmail} />
+            <form
+              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+              onSubmit={assignAdmin}
+            >
+              <Field
+                label="Nome do administrador"
+                onChange={setAdminName}
+                required
+                value={adminName}
+              />
+              <Field
+                label="E-mail do administrador"
+                onChange={setAdminEmail}
+                required
+                type="email"
+                value={adminEmail}
+              />
               <Button className="self-end" type="submit">
                 Designar
               </Button>
@@ -289,7 +324,14 @@ export function InstitutionDetailsDialog({
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button
-                onClick={() => onDeactivate(currentInstitution.id)}
+                onClick={() => {
+                  if (!inactive) {
+                    setConfirmDeactivate(true);
+                    return;
+                  }
+                  onDeactivate(currentInstitution.id);
+                  toast.success('Instituição reativada.');
+                }}
                 type="button"
                 variant={inactive ? 'primary' : 'outline'}
               >
@@ -304,6 +346,19 @@ export function InstitutionDetailsDialog({
           </section>
         </Dialog.Content>
       </Dialog.Portal>
+      <ConfirmDialog
+        cancelLabel="Cancelar"
+        confirmLabel="Desativar instituição"
+        description="A desativação impede o acesso dos usuários vinculados a esta instituição. Os dados serão preservados."
+        onConfirm={() => {
+          onDeactivate(currentInstitution.id);
+          setConfirmDeactivate(false);
+          toast.success('Instituição desativada.');
+        }}
+        onOpenChange={setConfirmDeactivate}
+        open={confirmDeactivate}
+        title="Desativar instituição?"
+      />
     </Dialog.Root>
   );
 }
@@ -317,7 +372,7 @@ function SummaryMetric({ label, value }: SummaryMetricProps) {
   return (
     <div className="rounded-lg border border-vince-border bg-[#fffafa] p-4">
       <p className="text-xs font-bold uppercase tracking-[0.08em] text-vince-muted">{label}</p>
-      <p className="mt-2 truncate text-xl font-extrabold text-vince-text">{value}</p>
+      <p className="mt-2 break-words text-xl font-extrabold text-vince-text">{value}</p>
     </div>
   );
 }
@@ -333,7 +388,7 @@ type FieldProps = {
 
 function Field({ label, maxLength, onChange, required = false, type = 'text', value }: FieldProps) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-2 block text-sm font-semibold text-vince-muted">{label}</span>
       <input
         className="h-11 w-full rounded-padrao border border-vince-border px-4 text-vince-text focus:border-vince-primary"

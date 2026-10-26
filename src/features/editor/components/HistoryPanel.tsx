@@ -62,7 +62,7 @@ export function HistoryPanel({ editable, editor, references }: HistoryPanelProps
 
   if (selected) {
     return (
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4 [&_button]:min-h-11">
         <button
           className="text-sm font-semibold text-vince-primary underline"
           onClick={() => setSelectedId(null)}
@@ -91,7 +91,9 @@ export function HistoryPanel({ editable, editor, references }: HistoryPanelProps
                     {paragraph.heading}
                   </p>
                 )}
-                <p className="text-sm leading-6 text-vince-text">{paragraph.text}</p>
+                <p className="break-words text-sm leading-6 text-vince-text [overflow-wrap:anywhere]">
+                  {paragraph.text}
+                </p>
                 {author && paragraph.text && (
                   <p className="mt-0.5 text-xs font-semibold text-vince-muted">
                     {t('history.writtenBy', { name: author.name })}
@@ -124,7 +126,7 @@ export function HistoryPanel({ editable, editor, references }: HistoryPanelProps
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4 [&_button]:min-h-11">
       <p className="text-sm leading-6 text-vince-muted">{t('history.intro')}</p>
       {entries.length === 0 && <p className="text-sm text-vince-muted">{t('history.empty')}</p>}
       <ol className="space-y-2 border-l-2 border-vince-border pl-3">

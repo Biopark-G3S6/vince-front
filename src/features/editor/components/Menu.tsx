@@ -21,10 +21,11 @@ export function MenuContent({
       <Dropdown.Content
         align={align}
         className={cn(
-          'z-50 min-w-[200px] rounded-md border border-vince-border bg-white p-1 text-xs shadow-lg print:hidden',
+          'z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[200px] max-w-[calc(100vw-16px)] overflow-y-auto rounded-md border border-vince-border bg-white p-1 text-sm shadow-lg print:hidden',
           className,
         )}
         sideOffset={4}
+        collisionPadding={8}
       >
         {children}
       </Dropdown.Content>
@@ -47,13 +48,13 @@ export function MenuItem({
 }) {
   return (
     <Dropdown.Item
-      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-vince-text outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[highlighted]:bg-vince-tertiary"
+      className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-3 py-2 text-vince-text outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[highlighted]:bg-vince-tertiary"
       disabled={disabled}
       onSelect={onSelect}
     >
       <span className="w-3 text-vince-primary">{checked ? '✓' : ''}</span>
       <span className="flex-1">{children}</span>
-      {shortcut && <span className="text-[10px] text-vince-muted">{shortcut}</span>}
+      {shortcut && <span className="shrink-0 text-xs text-vince-muted">{shortcut}</span>}
     </Dropdown.Item>
   );
 }
@@ -64,6 +65,8 @@ export function MenuSeparator() {
 
 export function MenuLabel({ children }: { children: ReactNode }) {
   return (
-    <Dropdown.Label className="px-2 py-1 text-[10px] text-vince-muted">{children}</Dropdown.Label>
+    <Dropdown.Label className="px-3 py-2 text-xs font-semibold text-vince-muted">
+      {children}
+    </Dropdown.Label>
   );
 }

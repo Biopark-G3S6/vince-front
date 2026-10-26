@@ -4,14 +4,19 @@ import { useCurrentUser } from '@features/admin';
 
 import {
   allowedScopes,
+  canReadArticle,
   changeEventTemplate,
+  createArticle,
   createEvent,
   createTeam,
   getArticleTemplate,
   listArticles,
   listEvents,
+  listEventRegistrations,
   listTemplates,
   saveTemplate,
+  registerForEvent,
+  setEventRegistrationOpen,
   setTemplateActive,
   type CreateEventInput,
   type SaveTemplateInput,
@@ -22,7 +27,16 @@ export function useArticleTemplate() {
 }
 
 export function useArticles() {
-  return useQuery({ queryFn: listArticles, queryKey: ['registry', 'articles'] });
+  const user = useCurrentUser();
+
+  return useQuery({
+    queryFn: async () => {
+      const articles = await listArticles();
+
+      return articles.filter((article) => canReadArticle(user.id, article));
+    },
+    queryKey: ['registry', 'articles', user.id],
+  });
 }
 
 /** Eventos cadastrados e as suas equipes — o que a tela de eventos e a de equipes listam. */
@@ -30,7 +44,10 @@ export function useEventDirectory() {
   const user = useCurrentUser();
 
   return useQuery({
-    queryFn: async () => ({ articles: await listArticles(), events: await listEvents(user.id) }),
+    queryFn: async () => ({
+      articles: (await listArticles()).filter((article) => canReadArticle(user.id, article)),
+      events: await listEvents(user.id),
+    }),
     queryKey: ['registry', 'directory', user.id],
     retry: false,
   });
@@ -74,3 +91,17 @@ export const useCreateEvent = () => useRegistryMutation<CreateEventInput, void>(
 export const useChangeEventTemplate = () => useRegistryMutation<string, never>(changeEventTemplate);
 
 export const useCreateTeam = () => useRegistryMutation(createTeam);
+
+export const useCreateArticle = () => useRegistryMutation(createArticle);
+
+export function useEventRegistrations() {
+  const user = useCurrentUser();
+  return useQuery({
+    queryFn: () => listEventRegistrations(user.id),
+    queryKey: ['registry', 'registrations', user.id],
+  });
+}
+
+export const useRegisterForEvent = () => useRegistryMutation(registerForEvent);
+
+export const useSetEventRegistrationOpen = () => useRegistryMutation(setEventRegistrationOpen);

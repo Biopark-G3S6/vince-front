@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
@@ -9,6 +9,7 @@ import {
   ClassesPage,
   CoursesPage,
   EventsPage,
+  PeoplePage,
   TeamsPage,
 } from '@features/academic';
 import {
@@ -18,7 +19,13 @@ import {
   PasswordSetupPage,
   RecoverAccessPage,
 } from '@features/access';
-import { ShellSlotsProvider } from '@features/admin';
+import {
+  canAccessSection,
+  ShellSlotsProvider,
+  useAuthenticatedUser,
+  useSignOut,
+  type AdminSection,
+} from '@features/admin';
 import { AssistancePage } from '@features/assistance';
 import { ArticleEditorPage, ChooseTemplatePage, PreviewPage } from '@features/editor';
 import { DiscussionPage, NotificationBell, NotificationsPage } from '@features/discussion';
@@ -51,6 +58,7 @@ type RouteKey =
   | 'courses'
   | 'classes'
   | 'events'
+  | 'people'
   | 'teams'
   | 'articles'
   | 'review'
@@ -76,6 +84,7 @@ const routeTitle: Record<RouteKey, string> = {
   editorPreview: 'Visualização do Artigo | VinceArt',
   chooseTemplate: 'Modelo do Artigo | VinceArt',
   events: 'Eventos | VinceArt',
+  people: 'Professores e alunos | VinceArt',
   institutions: 'Instituições | VinceArt',
   landing: 'VinceArt | Academic Portal',
   language: 'Idioma | VinceArt',
@@ -86,6 +95,27 @@ const routeTitle: Record<RouteKey, string> = {
   recoverAccess: 'Recuperar acesso | VinceArt',
   review: 'Ciclo de Correção | VinceArt',
   teams: 'Equipes | VinceArt',
+};
+
+const routeSections: Partial<Record<RouteKey, AdminSection>> = {
+  accessAccount: 'access',
+  articles: 'articles',
+  assistance: 'assistance',
+  classes: 'classes',
+  courses: 'courses',
+  dashboard: 'dashboard',
+  discussion: 'discussion',
+  editor: 'editor',
+  editorPreview: 'editor',
+  chooseTemplate: 'templates',
+  events: 'events',
+  people: 'people',
+  institutions: 'institutions',
+  language: 'language',
+  notifications: 'notifications',
+  progress: 'progress',
+  review: 'review',
+  teams: 'teams',
 };
 
 function resolveRoute(pathname: string): RouteKey {
@@ -123,6 +153,10 @@ function resolveRoute(pathname: string): RouteKey {
 
   if (pathname === '/admin/eventos' || pathname === '/eventos') {
     return 'events';
+  }
+
+  if (pathname === '/admin/pessoas' || pathname === '/pessoas') {
+    return 'people';
   }
 
   if (pathname === '/admin/equipes' || pathname === '/equipes') {
@@ -167,53 +201,99 @@ function useRoute() {
     document.title = routeTitle[route];
   }, [route]);
 
-  function navigateTo(pathname: string) {
-    window.history.pushState({}, '', pathname);
+  const navigateTo = useCallback((pathname: string, replace = false) => {
+    window.history[replace ? 'replaceState' : 'pushState']({}, '', pathname);
     setRoute(resolveRoute(pathname));
     window.scrollTo({ behavior: 'smooth', top: 0 });
-  }
+  }, []);
 
   return { navigateTo, route };
 }
 
 export function App() {
   const { navigateTo, route } = useRoute();
+  const authenticatedUser = useAuthenticatedUser();
+  const signOut = useSignOut();
+  const protectedSection = routeSections[route];
+  const permitted =
+    !protectedSection ||
+    (authenticatedUser ? canAccessSection(authenticatedUser.role, protectedSection) : false);
+  const visibleRoute: RouteKey =
+    protectedSection && !authenticatedUser
+      ? 'login'
+      : protectedSection && !permitted
+        ? 'dashboard'
+        : route;
 
   // Outra aba alterou os dados simulados: as consultas são refeitas, o que entrega a
   // mensagem a quem está com a discussão aberta, sem recarregar a página (RF-DSC-004).
   useEffect(() => subscribeMockDb(() => void queryClient.invalidateQueries()), []);
 
+  useEffect(() => {
+    if (protectedSection && !authenticatedUser) {
+      navigateTo('/entrar', true);
+      return;
+    }
+
+    if (protectedSection && !permitted) {
+      navigateTo('/admin/dashboard', true);
+    }
+  }, [authenticatedUser, navigateTo, permitted, protectedSection]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ShellSlotsProvider slots={shellSlots}>
         {/* Os catálogos de tradução são carregados sob demanda, por namespace (ADR-0026 §29). */}
-        <Suspense fallback={null}>
-          {route === 'landing' && <AccessLandingPage />}
-          {route === 'login' && (
+        <Suspense
+          fallback={
+            <div
+              className="flex min-h-screen items-center justify-center bg-vince-surface p-6 text-vince-muted"
+              role="status"
+            >
+              Carregando a página…
+            </div>
+          }
+        >
+          {visibleRoute === 'landing' && <AccessLandingPage />}
+          {visibleRoute === 'login' && (
             <LoginPage
-              onAuthenticated={() => navigateTo('/admin/dashboard')}
+              onAuthenticated={() => {
+                queryClient.clear();
+                navigateTo('/admin/dashboard');
+              }}
               onPasswordSetup={() => navigateTo('/definir-senha')}
             />
           )}
-          {route === 'recoverAccess' && <RecoverAccessPage />}
-          {route === 'passwordSetup' && <PasswordSetupPage />}
-          {route === 'dashboard' && <AcademicDashboardPage />}
-          {route === 'institutions' && <InstitutionsPage />}
-          {route === 'courses' && <CoursesPage />}
-          {route === 'classes' && <ClassesPage />}
-          {route === 'events' && <EventsPage />}
-          {route === 'teams' && <TeamsPage />}
-          {route === 'articles' && <ArticlesPage />}
-          {route === 'accessAccount' && <AccessAccountPage />}
-          {route === 'review' && <ReviewCyclePage />}
-          {route === 'discussion' && <DiscussionPage />}
-          {route === 'notifications' && <NotificationsPage />}
-          {route === 'assistance' && <AssistancePage />}
-          {route === 'progress' && <ProgressPage />}
-          {route === 'language' && <LanguageSettingsPage />}
-          {route === 'editor' && <ArticleEditorPage />}
-          {route === 'chooseTemplate' && <ChooseTemplatePage />}
-          {route === 'editorPreview' && <PreviewPage />}
+          {visibleRoute === 'recoverAccess' && <RecoverAccessPage />}
+          {visibleRoute === 'passwordSetup' && <PasswordSetupPage />}
+          {visibleRoute === 'dashboard' && <AcademicDashboardPage />}
+          {visibleRoute === 'institutions' && <InstitutionsPage />}
+          {visibleRoute === 'courses' && <CoursesPage />}
+          {visibleRoute === 'classes' && <ClassesPage />}
+          {visibleRoute === 'events' && <EventsPage />}
+          {visibleRoute === 'people' && <PeoplePage />}
+          {visibleRoute === 'teams' && <TeamsPage />}
+          {visibleRoute === 'articles' && <ArticlesPage />}
+          {visibleRoute === 'accessAccount' && (
+            <AccessAccountPage
+              onSignOut={() => {
+                signOut();
+                queryClient.clear();
+                window.sessionStorage.removeItem('vinceart.article');
+                window.sessionStorage.removeItem('vinceart.editor.identity');
+                navigateTo('/entrar', true);
+              }}
+            />
+          )}
+          {visibleRoute === 'review' && <ReviewCyclePage />}
+          {visibleRoute === 'discussion' && <DiscussionPage />}
+          {visibleRoute === 'notifications' && <NotificationsPage />}
+          {visibleRoute === 'assistance' && <AssistancePage />}
+          {visibleRoute === 'progress' && <ProgressPage />}
+          {visibleRoute === 'language' && <LanguageSettingsPage />}
+          {visibleRoute === 'editor' && <ArticleEditorPage />}
+          {visibleRoute === 'chooseTemplate' && <ChooseTemplatePage />}
+          {visibleRoute === 'editorPreview' && <PreviewPage />}
         </Suspense>
       </ShellSlotsProvider>
       <Toaster closeButton richColors />

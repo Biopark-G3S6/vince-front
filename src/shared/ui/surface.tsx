@@ -16,7 +16,7 @@ type MetricCardProps = {
 
 export function MetricCard({ icon, label, tone = 'default', value }: MetricCardProps) {
   return (
-    <article className="rounded-lg border border-vince-border bg-white p-5 shadow-sm">
+    <article className="min-w-0 rounded-lg border border-vince-border bg-white p-4 shadow-sm sm:p-5">
       {icon && (
         <span
           className={cn(
@@ -30,8 +30,8 @@ export function MetricCard({ icon, label, tone = 'default', value }: MetricCardP
       )}
       <p
         className={cn(
-          'text-4xl font-black',
-          icon && 'mt-5',
+          'text-3xl font-black sm:text-4xl',
+          icon && 'mt-3 sm:mt-5',
           tone === 'default' && 'text-vince-primary',
           tone === 'muted' && 'text-vince-muted',
           tone === 'danger' && 'text-red-800',
@@ -39,7 +39,7 @@ export function MetricCard({ icon, label, tone = 'default', value }: MetricCardP
       >
         {value}
       </p>
-      <p className="mt-2 text-base font-medium text-vince-muted">{label}</p>
+      <p className="mt-2 text-sm font-medium leading-6 text-vince-muted sm:text-base">{label}</p>
     </article>
   );
 }
@@ -58,11 +58,11 @@ export function StatusBadge({ label, tone }: { label: string; tone: BadgeTone })
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold',
+        'inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold',
         badgeToneClass[tone],
       )}
     >
-      <span className="h-2 w-2 rounded-full bg-current" />
+      <span className="h-2 w-2 shrink-0 rounded-full bg-current" />
       {label}
     </span>
   );
@@ -77,12 +77,16 @@ type SectionPanelProps = {
 
 export function SectionPanel({ actions, children, className, title }: SectionPanelProps) {
   return (
-    <section className={cn('rounded-lg border border-vince-border bg-white shadow-sm', className)}>
-      <div className="flex items-center justify-between gap-4 border-b border-vince-border px-6 py-5">
-        <h2 className="text-xl font-extrabold text-vince-text">{title}</h2>
+    <section
+      className={cn('min-w-0 rounded-lg border border-vince-border bg-white shadow-sm', className)}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-vince-border px-4 py-4 sm:px-6 sm:py-5">
+        <h2 className="min-w-0 break-words text-lg font-extrabold text-vince-text sm:text-xl">
+          {title}
+        </h2>
         {actions}
       </div>
-      <div className="p-6">{children}</div>
+      <div className="min-w-0 p-4 sm:p-6">{children}</div>
     </section>
   );
 }
@@ -96,8 +100,9 @@ type FilterChipProps = {
 export function FilterChip({ active = false, children, onClick }: FilterChipProps) {
   return (
     <button
+      aria-pressed={active}
       className={cn(
-        'h-10 rounded-full border px-5 text-base font-medium transition-colors',
+        'min-h-11 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
         active
           ? 'border-[#ff7c98] bg-[#ff7c98] text-vince-primary'
           : 'border-vince-border bg-white text-vince-muted hover:bg-vince-tertiary hover:text-vince-primary',

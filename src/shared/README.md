@@ -1,5 +1,9 @@
 # Shared
 
+> Estado atual: `api/` contém o armazenamento simulado e os erros da demonstração.
+> O cliente HTTP e `api/schema.ts` descritos abaixo ainda não estão integrados.
+> Consulte [`AUDITORIA.md`](../../AUDITORIA.md).
+
 Design system, cliente HTTP e utilitários. **Nunca importa de `features/`** (`ADR-0015 §6`) e
 **não contém regra de negócio** (`§7`).
 
@@ -26,6 +30,10 @@ Duas consequências práticas:
 - Componente daqui **não contém regra de negócio nem chama a API** (`ADR-0016 §21`).
 
 ## Estilo
+
+Na implementação atual, a interface usa Tailwind e o documento ProseMirror possui
+CSS específico em `features/editor/article-editor.css`, incluindo regras de impressão
+e leitura responsiva. Essa folha participa do resultado visual e também deve ser revisada.
 
 Tailwind é a **única** solução de estilização (`ADR-0016 §11`). Não adote biblioteca de
 componentes com sistema de tokens próprio (`§13`) — dois sistemas de design competindo produzem

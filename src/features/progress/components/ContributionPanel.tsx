@@ -3,21 +3,34 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useFormatters } from '@shared/i18n';
-import { Notice, ProgressBar, WarningIcon } from '@shared/ui';
+import { EmptyState, Notice, ProgressBar, WarningIcon } from '@shared/ui';
 
 import { useAdvisorTeams, useContribution } from '../api/hooks';
+import { QueryFeedback } from './QueryFeedback';
 
 /** RF-ACP-004 — Participação de cada integrante, subsídio à avaliação individual. */
 export function ContributionPanel() {
   const { t } = useTranslation('progress');
   const { compareText, formatNumber } = useFormatters();
-  const { data: teams = [] } = useAdvisorTeams();
+  const teamsQuery = useAdvisorTeams();
+  const teams = teamsQuery.data ?? [];
   const [selectedId, setSelectedId] = useState<string>();
-  const teamId = selectedId ?? teams[0]?.id;
-  const { data: contribution } = useContribution(teamId);
+  const teamId = teams.some((team) => team.id === selectedId) ? selectedId : teams[0]?.id;
+  const contributionQuery = useContribution(teamId);
+  const contribution = contributionQuery.data;
+
+  if (!teamsQuery.data)
+    return (
+      <QueryFeedback
+        error={teamsQuery.error}
+        onRetry={() => {
+          void teamsQuery.refetch();
+        }}
+      />
+    );
 
   if (teams.length === 0) {
-    return null;
+    return <EmptyState description={t('teams.emptyBody')} title={t('teams.emptyTitle')} />;
   }
 
   return (
@@ -27,7 +40,7 @@ export function ContributionPanel() {
           {t('contribution.team')}
         </span>
         <select
-          className="h-11 min-w-64 rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
+          className="h-11 w-full min-w-0 max-w-2xl rounded-lg border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
           onChange={(event) => setSelectedId(event.target.value)}
           value={teamId}
         >
@@ -45,6 +58,15 @@ export function ContributionPanel() {
         <p>{t('contribution.private')}</p>
       </Notice>
 
+      {!contribution && (
+        <QueryFeedback
+          error={contributionQuery.error}
+          onRetry={() => {
+            void contributionQuery.refetch();
+          }}
+        />
+      )}
+
       {contribution?.imported && (
         <Notice icon={<WarningIcon className="h-5 w-5" />} tone="warning">
           {t('contribution.imported')}
@@ -52,7 +74,12 @@ export function ContributionPanel() {
       )}
 
       {contribution && (
-        <div className="overflow-x-auto rounded-lg border border-vince-border bg-white shadow-sm">
+        <div
+          aria-label={contribution.teamName}
+          className="min-w-0 overflow-x-auto rounded-lg border border-vince-border bg-white shadow-sm"
+          role="region"
+          tabIndex={0}
+        >
           <table className="w-full min-w-[720px] text-left">
             <caption className="sr-only">{contribution.teamName}</caption>
             <thead className="border-b border-vince-border bg-vince-surface text-sm text-vince-muted">
