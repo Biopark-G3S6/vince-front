@@ -3,6 +3,15 @@ import { expect, test, type Page } from '@playwright/test';
 import { screens } from './screens';
 import { loginAs, sessionRoleForPath, setSession, type DemoRole } from './auth';
 
+/**
+ * Suíte de demonstração. Depende do login de demonstração (`vince123`) e da sessão
+ * injetada em `sessionStorage`, removidos na integração com o backend. Os fluxos das telas
+ * integradas (acesso, instituição, curso, turma, evento, equipe, artigo) foram portados para
+ * `e2e/integration/`, que roda contra a pilha real. Estes ficam pendentes até as suas telas
+ * serem integradas.
+ */
+test.fixme(true, 'Depende do login de demonstração removido; portar para e2e/integration.');
+
 // Every test receives a fresh browser context, including localStorage and sessionStorage.
 // Fix only Date so the seeded review deadline remains open; timers and autosave still run.
 test.beforeEach(async ({ page }) => {
@@ -55,119 +64,6 @@ for (const [name, path] of screens) {
   });
 }
 
-test('login: valida credenciais e abre o dashboard', async ({ page }) => {
-  await page.goto('/entrar');
-  await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.getByLabel('E-mail', { exact: true }).fill('pessoa@exemplo.com');
-  await page.getByLabel('Senha', { exact: true }).fill('incorreta');
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('inválidos');
-  await page.getByLabel('E-mail', { exact: true }).fill('admin@vinceart.edu.br');
-  await page.getByLabel('Senha', { exact: true }).fill('vince123');
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/dashboard$/);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-});
-
-for (const account of [
-  {
-    dashboard: 'Visão Geral Acadêmica',
-    name: 'Admin Geral',
-    role: 'Administrador' as const,
-  },
-  {
-    dashboard: 'Olá, Dr. Ricardo Santos',
-    name: 'Dr. Ricardo Santos',
-    role: 'Coordenador' as const,
-  },
-  { dashboard: 'Olá, Prof. Almeida', name: 'Prof. Almeida', role: 'Orientador' as const },
-  { dashboard: 'Olá, João Pedro Silva', name: 'João Pedro Silva', role: 'Aluno' as const },
-]) {
-  test(`login ${account.role}: abre navegação e conteúdo próprios`, async ({ page }) => {
-    await loginAs(page, account.role, false);
-    await expect(page.getByRole('heading', { name: account.dashboard, exact: true })).toBeVisible();
-    await expect(page.locator(`a[aria-label="${account.name}"]`)).toBeVisible();
-
-    const institutionLinks = page.locator('a[href="/admin/instituicoes"]');
-    const peopleLinks = page.locator('a[href="/admin/pessoas"]');
-    const teamLinks = page.locator('a[href="/admin/equipes"]');
-    if (account.role === 'Administrador') {
-      await expect(institutionLinks).toHaveCount(1);
-      await expect(peopleLinks).toHaveCount(0);
-      await expect(teamLinks).toHaveCount(0);
-    } else if (account.role === 'Coordenador') {
-      await expect(institutionLinks).toHaveCount(0);
-      await expect(peopleLinks).toHaveCount(2);
-      await expect(teamLinks).toHaveCount(0);
-    } else if (account.role === 'Orientador') {
-      await expect(institutionLinks).toHaveCount(0);
-      await expect(teamLinks).toHaveCount(1);
-    } else {
-      await expect(institutionLinks).toHaveCount(0);
-      await expect(teamLinks).toHaveCount(0);
-      await page.goto('/admin/instituicoes');
-      await expect(page).toHaveURL(/\/admin\/dashboard$/);
-      await expect(page.getByText('Instituições cadastradas', { exact: true })).toHaveCount(0);
-    }
-
-    await page.goto('/admin/acesso');
-    await expect(page.getByLabel('Nome', { exact: true })).toHaveValue(account.name);
-    await page.getByRole('button', { name: 'Encerrar sessão', exact: true }).click();
-    await expect(page).toHaveURL(/\/entrar$/);
-    await page.goto('/admin/dashboard');
-    await expect(page).toHaveURL(/\/entrar$/);
-  });
-}
-
-test('coordenador: consulta pessoas, cadastra evento e gerencia avaliadores', async ({ page }) => {
-  await loginAs(page, 'Coordenador', false);
-  await page.goto('/admin/pessoas');
-  await expect(
-    page.getByRole('heading', { name: 'Professores e alunos', exact: true }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Professores', exact: true }).click();
-  await expect(page.getByText('Prof. Almeida', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Alunos', exact: true }).click();
-  await page.getByLabel('Buscar professor ou aluno', { exact: true }).fill('João');
-  await expect(page.getByText('João Pedro', { exact: true })).toBeVisible();
-
-  await page.goto('/admin/eventos');
-  await page.getByRole('button', { name: 'Cadastrar evento', exact: true }).click();
-  const eventDialog = page.getByRole('dialog', { name: 'Cadastrar evento', exact: true });
-  await eventDialog.getByLabel('Nome do evento', { exact: true }).fill('Mostra Científica E2E');
-  await eventDialog.getByLabel('Tema', { exact: true }).fill('Pesquisa aplicada e inovação');
-  await eventDialog.getByLabel('Data inicial', { exact: true }).fill('2027-03-10');
-  await eventDialog.getByLabel('Data final', { exact: true }).fill('2027-03-20');
-  await eventDialog.getByLabel('Máximo de equipes', { exact: true }).fill('12');
-  await eventDialog.getByLabel('Integrantes por equipe', { exact: true }).fill('5');
-  await eventDialog.getByRole('button', { name: 'Cadastrar evento', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Mostra Científica E2E', exact: true }).first(),
-  ).toBeVisible();
-
-  await page.getByRole('button', { name: 'Convidar avaliador', exact: true }).click();
-  const invite = page.getByRole('dialog', { name: 'Convidar avaliador', exact: true });
-  await invite.getByLabel('Nome do avaliador', { exact: true }).fill('Dra. Avaliadora E2E');
-  await invite.getByLabel('E-mail do avaliador', { exact: true }).fill('avaliadora@e2e.edu.br');
-  await invite.getByLabel('Área de especialidade', { exact: true }).fill('Inovação');
-  await invite.getByRole('button', { name: 'Enviar convite', exact: true }).click();
-  await expect(page.getByText('Convite pendente', { exact: true })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Cadastrar avaliador', exact: true }).click();
-  const evaluator = page.getByRole('dialog', { name: 'Cadastrar avaliador', exact: true });
-  await evaluator.getByLabel('Nome do avaliador', { exact: true }).fill('Prof. Avaliador Ativo');
-  await evaluator.getByLabel('E-mail do avaliador', { exact: true }).fill('ativo@e2e.edu.br');
-  await evaluator.getByLabel('Área de especialidade', { exact: true }).fill('Metodologia');
-  await evaluator.getByRole('button', { name: 'Cadastrar avaliador', exact: true }).click();
-  await expect(page.getByText('Prof. Avaliador Ativo', { exact: true })).toBeVisible();
-  await expect(page.getByText('Cadastrado', { exact: true })).toBeVisible();
-  await page.reload();
-  await expect(
-    page.getByRole('heading', { name: 'Mostra Científica E2E', exact: true }).first(),
-  ).toBeVisible();
-  await expect(page.getByText('Dra. Avaliadora E2E', { exact: true })).toBeVisible();
-});
-
 test('navegação: menu permite abrir equipes e voltar aos artigos', async ({ page, isMobile }) => {
   await page.goto('/admin/dashboard');
   await selectPersona(page, 'Orientador');
@@ -204,43 +100,6 @@ test('navegação: menu permite abrir equipes e voltar aos artigos', async ({ pa
   await expect(page).toHaveURL(/\/admin\/artigos$/);
   await expect(
     page.getByRole('heading', { name: 'Artigos orientados', exact: true }),
-  ).toBeVisible();
-});
-
-test('equipe: valida cadastro, cria artigo e preserva edição após recarregar', async ({ page }) => {
-  await selectPersona(page, 'Orientador');
-  await page.goto('/admin/equipes');
-  await page.getByRole('button', { name: 'Criar equipe', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Criar equipe', exact: true });
-  await dialog.getByRole('button', { name: 'Criar equipe e artigo' }).click();
-  await expect(
-    page.getByText('Informe o nome da equipe, o título do artigo e ao menos um integrante.'),
-  ).toBeVisible();
-  await dialog.getByLabel('Nome da equipe').fill('Equipe E2E');
-  await dialog.getByLabel('Título do artigo').fill('Pesquisa de fluxo E2E');
-  await dialog.getByRole('button', { name: 'Criar equipe e artigo' }).click();
-  await expect(page).toHaveURL(/\/artigos\/editor\?artigo=article-/);
-  await selectPersona(page, 'Aluno');
-  const article = page.getByLabel('Corpo do artigo', { exact: true });
-  await expect(article).toHaveAttribute('contenteditable', 'true');
-  await article.click();
-  await page.keyboard.press('Control+End');
-  await page.keyboard.press('Enter');
-  await page.keyboard.insertText('Evidência de edição persistida no navegador.');
-  await expect(article).toContainText('Evidência de edição persistida no navegador.');
-  await expect
-    .poll(async () => page.evaluate(() => JSON.stringify(localStorage)))
-    .toContain('Evidência de edição persistida no navegador.');
-  await page.reload();
-  await expect(page.getByLabel('Corpo do artigo', { exact: true })).toContainText(
-    'Evidência de edição persistida no navegador.',
-  );
-  await page.goto('/admin/artigos');
-  const registered = page.locator('li').filter({ hasText: 'Pesquisa de fluxo E2E' });
-  await expect(registered).toContainText('Equipe E2E');
-  await registered.getByRole('link', { name: 'Discussão', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Pesquisa de fluxo E2E', exact: true }),
   ).toBeVisible();
 });
 
@@ -340,69 +199,6 @@ test('correção: entrega, desfaz, registra apontamento e devolve ao aluno', asy
   await expect(page.getByRole('button', { name: 'Entregar etapa', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Entregas', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'Referencial teórico', exact: true })).toBeVisible();
-});
-
-test('instituição: cria, edita, impede administrador duplicado e confirma desativação', async ({
-  page,
-}) => {
-  await page.goto('/admin/instituicoes');
-  await page.getByRole('button', { name: 'Nova instituição', exact: true }).click();
-  const create = page.getByRole('dialog', { name: 'Nova instituição', exact: true });
-  await create.getByLabel('Nome institucional', { exact: true }).fill('Instituição de testes E2E');
-  await create.getByLabel('Sigla', { exact: true }).fill('E2E');
-  await create.getByLabel('CNPJ / identificador', { exact: true }).fill('12.345.678/0001-90');
-  await create
-    .getByLabel('Domínio institucional', { exact: true })
-    .fill('https://instituicao.edu.br');
-  await create.getByLabel('Cidade', { exact: true }).fill('São Paulo');
-  await create.getByLabel('UF', { exact: true }).fill('SP');
-  await create.getByLabel('E-mail de suporte', { exact: true }).fill('suporte@instituicao.edu.br');
-  await create.getByRole('button', { name: 'Salvar instituição', exact: true }).click();
-  await expect(
-    page.getByText('Informe apenas o domínio institucional, como instituicao.edu.br.', {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await create.getByLabel('Domínio institucional', { exact: true }).fill('instituicao.edu.br');
-  await create.getByRole('button', { name: 'Salvar instituição', exact: true }).click();
-  const details = page.getByRole('dialog', { name: /^Instituição de testes E2E/ });
-  await expect(details).toBeVisible();
-  await details.getByLabel('Nome', { exact: true }).fill('Instituição de testes E2E revisada');
-  await details.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
-  await expect(
-    details.getByRole('heading', { name: 'Instituição de testes E2E revisada', exact: true }),
-  ).toBeVisible();
-  await details.getByLabel('Nome do administrador', { exact: true }).fill('Ana E2E');
-  await details
-    .getByLabel('E-mail do administrador', { exact: true })
-    .fill('ana@instituicao.edu.br');
-  await details.getByRole('button', { name: 'Designar', exact: true }).click();
-  await expect(details.getByText('ana@instituicao.edu.br', { exact: true })).toBeVisible();
-  await details.getByLabel('Nome do administrador', { exact: true }).fill('Ana duplicada');
-  await details
-    .getByLabel('E-mail do administrador', { exact: true })
-    .fill('ANA@instituicao.edu.br');
-  await details.getByRole('button', { name: 'Designar', exact: true }).click();
-  await expect(
-    page.getByText('Este administrador já está vinculado à instituição.', { exact: true }),
-  ).toBeVisible();
-  await expect(details.getByRole('button', { name: /Revogar administrador/ })).toHaveCount(1);
-  await details.getByRole('button', { name: 'Desativar instituição', exact: true }).click();
-  const confirm = page.getByRole('dialog', { name: 'Desativar instituição?', exact: true });
-  await confirm.getByRole('button', { name: 'Cancelar', exact: true }).click();
-  await expect(details.getByText('Ativa', { exact: true })).toBeVisible();
-  await details.getByRole('button', { name: 'Desativar instituição', exact: true }).click();
-  await confirm.getByRole('button', { name: 'Desativar instituição', exact: true }).click();
-  await expect(details.getByText('Inativa', { exact: true })).toBeVisible();
-  await details.getByRole('button', { name: 'Reativar instituição', exact: true }).click();
-  await expect(details.getByText('Ativa', { exact: true })).toBeVisible();
-  await assertFitsViewport(page);
-  await details.getByRole('button', { name: 'Fechar', exact: true }).click();
-  await page.getByLabel('Buscar instituições', { exact: true }).fill('E2E revisada');
-  await expect(
-    page.getByRole('heading', { name: 'Instituição de testes E2E revisada', exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText('Mostrando 1 de 4 instituições', { exact: false })).toBeVisible();
 });
 
 test('assistência e acompanhamento: percorre abas, verifica artigo e gera relatório', async ({

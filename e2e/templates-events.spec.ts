@@ -3,6 +3,15 @@ import { Document, HeadingLevel, Packer, Paragraph } from 'docx';
 
 import { setSession } from './auth';
 
+/**
+ * Suíte de demonstração. Depende do login de demonstração (`vince123`) e da sessão
+ * injetada em `sessionStorage`, removidos na integração com o backend. Os fluxos das telas
+ * integradas (acesso, instituição, curso, turma, evento, equipe, artigo) foram portados para
+ * `e2e/integration/`, que roda contra a pilha real. Estes ficam pendentes até as suas telas
+ * serem integradas.
+ */
+test.fixme(true, 'Depende do login de demonstração removido; portar para e2e/integration.');
+
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 test.beforeEach(async ({ page }) => {

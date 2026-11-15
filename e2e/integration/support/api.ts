@@ -67,6 +67,14 @@ export class ApiSession {
   }
 }
 
+/** O campo `type="email"` do navegador recusa acento antes do `@`: o e-mail gerado não tem. */
+function slug(text: string) {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 export function uniqueSuffix() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -91,7 +99,7 @@ export async function inviteToInstitution(
   name: string,
   suffix: string,
 ): Promise<Account> {
-  const email = `${roleCode.toLowerCase()}.${name.split(' ')[0]?.toLowerCase()}.${suffix}@e2e.test`;
+  const email = `${roleCode.toLowerCase()}.${slug(name.split(' ')[0] ?? '')}.${suffix}@e2e.test`;
   const issued = await actor.post<{ url: string }>(`/institutions/${institutionId}/invitations`, {
     roleCode,
     targetEmail: email,
@@ -181,7 +189,7 @@ export async function buildScenario(): Promise<Scenario> {
     const issued = await prof.post<{ url: string }>(`/cohorts/${cohort.id}/invitations`, {
       expiresAt: inAWeek(),
     });
-    const email = `aluno.${name.split(' ')[0]?.toLowerCase()}.${suffix}@e2e.test`;
+    const email = `aluno.${slug(name.split(' ')[0] ?? '')}.${suffix}@e2e.test`;
     const accepted = await acceptInvitation(issued.url ?? '', name, email);
     students.push({ id: accepted.userId, email, name });
   }
