@@ -1,6 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
+import { hasPermission, useCurrentUser } from '@features/admin';
+import { useUserNames, useUserSearch } from '@shared/api/directory';
 import {
   Button,
   BuildingIcon,
@@ -13,178 +15,185 @@ import {
 } from '@shared/ui';
 
 import {
+  statusOfCohort,
+  useCohortDetails,
+  useCohortMutations,
+  useCohorts,
+  type CohortDto,
+  type CohortStatus,
+} from '../api/cohortApi';
+import { describeAcademicError, useCourses } from '../api/courseApi';
+import {
+  AcademicActionDialog,
+  AcademicField,
+  academicFieldClass,
+} from '../components/AcademicActionDialog';
+import {
   FilterChip,
   MetricCard,
   PageScaffold,
   SectionPanel,
   StatusBadge,
 } from '../components/AcademicPrimitives';
-import { type ClassGroup, type ClassStatus } from '../model/academic';
-import { useAcademicCollection } from '../api/academicStore';
-import {
-  AcademicActionDialog,
-  AcademicField,
-  academicFieldClass,
-} from '../components/AcademicActionDialog';
 
-const statusView: Record<ClassStatus, { label: string; tone: 'success' | 'warning' | 'muted' }> = {
+const statusView: Record<CohortStatus, { label: string; tone: 'success' | 'warning' | 'muted' }> = {
   active: { label: 'Ativa', tone: 'success' },
   closed: { label: 'Encerrada', tone: 'muted' },
   planned: { label: 'Planejada', tone: 'warning' },
 };
 
+/** As datas da turma são dias de calendário, gravados à meia-noite UTC. */
+const formatDate = (iso: string) =>
+  new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(iso));
+
+/** A validade do convite é um instante: mostrada no fuso de quem vê. */
+const formatInstant = (iso: string) => new Intl.DateTimeFormat('pt-BR').format(new Date(iso));
+
+type Action = 'create' | 'professor' | 'student' | 'invite' | null;
+
+/** RF-TUR-001 a RF-TUR-004 (o ingresso por convite, RF-TUR-005, é a tela de aceite). */
 export function ClassesPage() {
-  const [classGroups, setClassGroups] = useAcademicCollection('classGroups');
-  const [courses] = useAcademicCollection('courses');
-  const [action, setAction] = useState<'create' | 'professor' | 'student' | 'invite' | null>(null);
-  const [registeredStudents, setRegisteredStudents] = useAcademicCollection('registeredStudents');
+  const user = useCurrentUser();
+  const coursesQuery = useCourses();
+  const courses = useMemo(() => coursesQuery.data ?? [], [coursesQuery.data]);
+  const { cohorts, isPending } = useCohorts(courses);
+  const mutations = useCohortMutations();
+  const can = (permission: string) => hasPermission(user, permission);
+
+  const [action, setAction] = useState<Action>(null);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<'all' | ClassStatus>('all');
-  const [selectedClassId, setSelectedClassId] = useState(classGroups[0]?.id ?? '');
+  const [status, setStatus] = useState<'all' | CohortStatus>('all');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [lastInvitationUrl, setLastInvitationUrl] = useState('');
+
+  const courseNames = useMemo(
+    () => new Map(courses.map((course) => [course.id, course.name])),
+    [courses],
+  );
+  const courseName = (courseId: string) => courseNames.get(courseId) ?? 'Curso';
 
   const visibleClasses = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
-
-    return classGroups.filter((classGroup) => {
-      const searchable = [
-        classGroup.name,
-        classGroup.course,
-        classGroup.term,
-        classGroup.professors.join(' '),
-      ]
+    return cohorts.filter((cohort) => {
+      const searchable = [cohort.identification, courseNames.get(cohort.courseId), cohort.term]
         .join(' ')
         .toLocaleLowerCase('pt-BR');
-      const matchesStatus = status === 'all' || classGroup.status === status;
-
-      return (
-        matchesStatus && (normalizedSearch.length === 0 || searchable.includes(normalizedSearch))
-      );
+      const matchesStatus = status === 'all' || statusOfCohort(cohort) === status;
+      return matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch));
     });
-  }, [classGroups, search, status]);
+  }, [cohorts, courseNames, search, status]);
 
   const selectedClass =
-    visibleClasses.find((classGroup) => classGroup.id === selectedClassId) ?? visibleClasses[0];
+    visibleClasses.find((cohort) => cohort.id === selectedClassId) ?? visibleClasses[0];
+  const closed = selectedClass ? statusOfCohort(selectedClass) === 'closed' : true;
+  const details = useCohortDetails(selectedClass?.id, user.permissions);
+  const professorIds = (details.professors.data ?? []).map((item) => item.userId);
+  const enrollments = details.enrollments.data ?? [];
+  const names = useUserNames([...professorIds, ...enrollments.map((item) => item.userId)]);
+  const professorCandidates = useUserSearch(
+    { role: 'PROFESSOR' },
+    can('COHORT:ASSIGN_PROFESSOR') && action === 'professor',
+  );
 
-  function handleAction(event: FormEvent<HTMLFormElement>) {
+  async function run(task: () => Promise<unknown>, success: string) {
+    try {
+      await task();
+      toast.success(success);
+      return true;
+    } catch (error) {
+      toast.error(describeAcademicError(error));
+      return false;
+    }
+  }
+
+  async function handleAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const text = (key: string) => String(form.get(key) ?? '').trim();
+    let done = false;
+
     if (action === 'create') {
-      if (!text('name') || !text('term')) {
-        toast.error('Preencha o nome e o período da turma.');
+      if (!text('name') || !text('term') || !text('course')) {
+        toast.error('Preencha o curso, o nome e o período da turma.');
         return;
       }
       if (text('endDate') < text('startDate')) {
         toast.error('A data final deve ser igual ou posterior à data inicial.');
         return;
       }
-      const formatDate = (date: string) =>
-        new Intl.DateTimeFormat('pt-BR').format(new Date(`${date}T12:00:00`));
-      const classGroup: ClassGroup = {
-        id: crypto.randomUUID(),
-        name: text('name'),
-        course: text('course'),
-        term: text('term'),
-        startDate: formatDate(text('startDate')),
-        endDate: formatDate(text('endDate')),
-        status: 'planned',
-        students: 0,
-        professors: [],
-        invitations: [],
-      };
-      setClassGroups((current) => [...current, classGroup]);
-      setSelectedClassId(classGroup.id);
-      setSearch('');
-      setStatus('all');
-      toast.success('Turma criada na demonstração.');
-    } else if (selectedClass) {
-      if (action === 'professor') {
-        const name = text('name');
-        if (!name) {
-          toast.error('Informe o nome do professor.');
-          return;
-        }
-        if (
-          selectedClass.professors.some(
-            (professor) => professor.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'),
-          )
-        ) {
-          toast.error('Este professor já está designado para a turma.');
-          return;
-        }
-        setClassGroups((current) =>
-          current.map((group) =>
-            group.id === selectedClass.id
-              ? { ...group, professors: [...group.professors, name] }
-              : group,
-          ),
-        );
-        toast.success('Professor designado na demonstração.');
-      } else if (action === 'student') {
-        const name = text('name');
-        if (!name) {
-          toast.error('Informe o nome do aluno.');
-          return;
-        }
-        if (
-          (registeredStudents[selectedClass.id] ?? []).some(
-            (student) => student.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'),
-          )
-        ) {
-          toast.error('Este aluno já foi cadastrado nesta turma.');
-          return;
-        }
-        setRegisteredStudents((current) => ({
-          ...current,
-          [selectedClass.id]: [...(current[selectedClass.id] ?? []), name],
-        }));
-        setClassGroups((current) =>
-          current.map((group) =>
-            group.id === selectedClass.id ? { ...group, students: group.students + 1 } : group,
-          ),
-        );
-        toast.success('Aluno cadastrado na demonstração.');
-      } else if (action === 'invite') {
-        const expiresAt = text('expiresAt');
-        if (new Date(`${expiresAt}T23:59:59`).getTime() < Date.now()) {
-          toast.error('A validade do convite deve ser uma data futura.');
-          return;
-        }
-        const invitation = {
-          code: `TURMA-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-          expiresAt: new Intl.DateTimeFormat('pt-BR').format(new Date(`${expiresAt}T12:00:00`)),
-          status: 'active' as const,
-          uses: 0,
-        };
-        setClassGroups((current) =>
-          current.map((group) =>
-            group.id === selectedClass.id
-              ? { ...group, invitations: [...group.invitations, invitation] }
-              : group,
-          ),
-        );
-        toast.success('Convite emitido na demonstração.');
+      done = await run(async () => {
+        const created = await mutations.create.mutateAsync({
+          courseId: text('course'),
+          identification: text('name'),
+          term: text('term'),
+          startsAt: `${text('startDate')}T00:00:00.000Z`,
+          endsAt: `${text('endDate')}T00:00:00.000Z`,
+        });
+        setSelectedClassId(created.id);
+        setSearch('');
+        setStatus('all');
+      }, 'Turma criada.');
+    } else if (selectedClass && action === 'professor') {
+      done = await run(
+        () =>
+          mutations.assignProfessor.mutateAsync({
+            cohortId: selectedClass.id,
+            userId: text('professor'),
+          }),
+        'Professor designado.',
+      );
+    } else if (selectedClass && action === 'student') {
+      done = await run(
+        () =>
+          mutations.enroll.mutateAsync({
+            cohortId: selectedClass.id,
+            name: text('name'),
+            email: text('email'),
+          }),
+        'Aluno cadastrado na turma.',
+      );
+    } else if (selectedClass && action === 'invite') {
+      const expiresAt = new Date(`${text('expiresAt')}T23:59:59`);
+      if (expiresAt.getTime() < Date.now()) {
+        toast.error('A validade do convite deve ser uma data futura.');
+        return;
       }
+      done = await run(async () => {
+        const issued = await mutations.invite.mutateAsync({
+          cohortId: selectedClass.id,
+          expiresAt: expiresAt.toISOString(),
+        });
+        setLastInvitationUrl(issued.url ? `${window.location.origin}${issued.url}` : '');
+      }, 'Convite emitido.');
     }
-    setAction(null);
+
+    if (done) setAction(null);
   }
+
+  const activeTerms = new Set(
+    cohorts.filter((cohort) => statusOfCohort(cohort) === 'active').map((cohort) => cohort.term),
+  );
 
   return (
     <PageScaffold
       actions={
         <>
-          <Button
-            className="rounded-padrao px-6"
-            disabled={!selectedClass || selectedClass.status === 'closed'}
-            onClick={() => setAction('invite')}
-            variant="outline"
-          >
-            Emitir convite
-          </Button>
-          <Button className="rounded-padrao px-7" onClick={() => setAction('create')}>
-            <PlusIcon className="h-5 w-5" />
-            Nova turma
-          </Button>
+          {can('INVITATION:CREATE') && (
+            <Button
+              className="rounded-padrao px-6"
+              disabled={!selectedClass || closed}
+              onClick={() => setAction('invite')}
+              variant="outline"
+            >
+              Emitir convite
+            </Button>
+          )}
+          {can('COHORT:CREATE') && (
+            <Button className="rounded-padrao px-7" onClick={() => setAction('create')}>
+              <PlusIcon className="h-5 w-5" />
+              Nova turma
+            </Button>
+          )}
         </>
       }
       activeSection="classes"
@@ -195,13 +204,13 @@ export function ClassesPage() {
       <AcademicActionDialog
         description={
           action === 'create'
-            ? 'Cadastre a turma e o período letivo. Os dados são salvos neste navegador.'
-            : `Turma: ${selectedClass?.name ?? ''}. Os dados são salvos neste navegador.`
+            ? 'Cadastre a turma e o período letivo.'
+            : `Turma: ${selectedClass?.identification ?? ''}.`
         }
         onOpenChange={(open) => {
           if (!open) setAction(null);
         }}
-        onSubmit={handleAction}
+        onSubmit={(event) => void handleAction(event)}
         open={action !== null}
         title={
           action === 'create'
@@ -220,9 +229,9 @@ export function ClassesPage() {
               <span className="mb-2 block text-sm font-semibold text-vince-muted">Curso</span>
               <select className={academicFieldClass} name="course" required>
                 {courses
-                  .filter((course) => course.status === 'active')
+                  .filter((course) => course.active)
                   .map((course) => (
-                    <option key={course.id} value={course.name}>
+                    <option key={course.id} value={course.id}>
                       {course.name}
                     </option>
                   ))}
@@ -236,40 +245,45 @@ export function ClassesPage() {
           </>
         ) : action === 'invite' ? (
           <AcademicField label="Validade do convite" name="expiresAt" required type="date" />
+        ) : action === 'professor' ? (
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-vince-muted">Professor</span>
+            <select className={academicFieldClass} name="professor" required>
+              <option value="">Selecione</option>
+              {(professorCandidates.data?.items ?? []).map((professor) => (
+                <option key={professor.id} value={professor.id}>
+                  {professor.name}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : (
-          <AcademicField
-            label={action === 'professor' ? 'Nome do professor' : 'Nome do aluno'}
-            name="name"
-            required
-          />
+          <>
+            <AcademicField label="Nome do aluno" name="name" required />
+            <AcademicField label="E-mail do aluno" name="email" required type="email" />
+          </>
         )}
       </AcademicActionDialog>
       <section className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MetricCard
           icon={<BuildingIcon className="h-5 w-5" />}
           label="Turmas cadastradas"
-          value={String(classGroups.length)}
+          value={String(cohorts.length)}
         />
         <MetricCard
           icon={<CalendarIcon className="h-5 w-5" />}
           label="Períodos ativos"
-          value={String(
-            new Set(
-              classGroups
-                .filter((classGroup) => classGroup.status === 'active')
-                .map((classGroup) => classGroup.term),
-            ).size,
-          )}
+          value={String(activeTerms.size)}
         />
         <MetricCard
           icon={<UserIcon className="h-5 w-5" />}
-          label="Professores"
-          value={String(new Set(classGroups.flatMap((classGroup) => classGroup.professors)).size)}
+          label="Professores da turma"
+          value={selectedClass ? String(professorIds.length) : '—'}
         />
         <MetricCard
           icon={<UsersIcon className="h-5 w-5" />}
-          label="Alunos vinculados"
-          value={String(classGroups.reduce((total, classGroup) => total + classGroup.students, 0))}
+          label="Alunos da turma"
+          value={selectedClass && details.enrollments.data ? String(enrollments.length) : '—'}
         />
       </section>
 
@@ -281,7 +295,7 @@ export function ClassesPage() {
             <input
               className="h-12 w-full rounded-lg border border-vince-border bg-white pl-14 pr-5 text-base text-vince-muted placeholder:text-vince-muted focus:border-vince-primary"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por turma, curso, período ou professor..."
+              placeholder="Buscar por turma, curso ou período..."
               value={search}
             />
           </label>
@@ -305,15 +319,21 @@ export function ClassesPage() {
 
       <section className="mt-8 grid min-w-0 gap-8 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="grid min-w-0 content-start gap-5">
-          {visibleClasses.map((classGroup) => (
+          {visibleClasses.map((cohort) => (
             <ClassCard
-              classGroup={classGroup}
-              key={classGroup.id}
-              onSelect={() => setSelectedClassId(classGroup.id)}
-              selected={classGroup.id === selectedClass?.id}
+              cohort={cohort}
+              courseName={courseName(cohort.courseId)}
+              key={cohort.id}
+              onSelect={() => setSelectedClassId(cohort.id)}
+              selected={cohort.id === selectedClass?.id}
             />
           ))}
-          {visibleClasses.length === 0 && (
+          {isPending && (
+            <p className="text-center text-vince-muted" role="status">
+              Carregando turmas…
+            </p>
+          )}
+          {!isPending && visibleClasses.length === 0 && (
             <EmptyState
               title="Nenhuma turma encontrada"
               description="Ajuste a busca ou os filtros para encontrar outras turmas."
@@ -329,131 +349,154 @@ export function ClassesPage() {
                   {selectedClass.term}
                 </p>
                 <h2 className="mt-2 text-2xl font-extrabold text-vince-text">
-                  {selectedClass.name}
+                  {selectedClass.identification}
                 </h2>
-                <p className="mt-2 text-vince-muted">{selectedClass.course}</p>
+                <p className="mt-2 text-vince-muted">{courseName(selectedClass.courseId)}</p>
               </div>
 
               <div className="grid gap-3">
-                <Button
-                  disabled={selectedClass.status === 'closed'}
-                  onClick={() => setAction('professor')}
-                >
-                  Designar professor
-                </Button>
-                <Button
-                  disabled={selectedClass.status === 'closed'}
-                  onClick={() => setAction('student')}
-                  variant="outline"
-                >
-                  Cadastrar aluno
-                </Button>
-                <Button
-                  disabled={selectedClass.status === 'closed'}
-                  onClick={() => setAction('invite')}
-                  variant="outline"
-                >
-                  Emitir convite multiuso
-                </Button>
+                {can('COHORT:ASSIGN_PROFESSOR') && (
+                  <Button disabled={closed} onClick={() => setAction('professor')}>
+                    Designar professor
+                  </Button>
+                )}
+                {can('ENROLLMENT:CREATE') && (
+                  <Button disabled={closed} onClick={() => setAction('student')} variant="outline">
+                    Cadastrar aluno
+                  </Button>
+                )}
+                {can('INVITATION:CREATE') && (
+                  <Button disabled={closed} onClick={() => setAction('invite')} variant="outline">
+                    Emitir convite multiuso
+                  </Button>
+                )}
+                {can('COHORT:DEACTIVATE') && selectedClass.active && (
+                  <Button
+                    onClick={() =>
+                      void run(
+                        () => mutations.deactivate.mutateAsync(selectedClass),
+                        'Turma encerrada.',
+                      )
+                    }
+                    variant="outline"
+                  >
+                    Encerrar turma
+                  </Button>
+                )}
               </div>
 
-              <div className="rounded-lg border border-vince-border">
-                <div className="border-b border-vince-border px-4 py-3 font-bold text-vince-text">
-                  Professores
-                </div>
-                <div className="divide-y divide-vince-border">
-                  {selectedClass.professors.map((professor) => (
-                    <div
-                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                      key={professor}
-                    >
-                      <span className="font-medium text-vince-muted">{professor}</span>
+              {lastInvitationUrl && (
+                <p
+                  className="break-all rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900"
+                  role="status"
+                >
+                  Link do convite: <span className="font-semibold">{lastInvitationUrl}</span>
+                </p>
+              )}
+
+              <ListBox title="Professores">
+                {professorIds.map((professorId) => (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                    key={professorId}
+                  >
+                    <span className="font-medium text-vince-muted">
+                      {names.nameOf(professorId)}
+                    </span>
+                    {can('COHORT:REVOKE_PROFESSOR') && (
                       <button
-                        aria-label={`Revogar professor ${professor}`}
+                        aria-label={`Revogar professor ${names.nameOf(professorId)}`}
                         className="min-h-10 text-sm font-semibold text-vince-primary"
-                        onClick={() => {
-                          setClassGroups((current) =>
-                            current.map((group) =>
-                              group.id === selectedClass.id
-                                ? {
-                                    ...group,
-                                    professors: group.professors.filter(
-                                      (name) => name !== professor,
-                                    ),
-                                  }
-                                : group,
-                            ),
-                          );
-                          toast.success('Vínculo do professor revogado na demonstração.');
-                        }}
+                        onClick={() =>
+                          void run(
+                            () =>
+                              mutations.revokeProfessor.mutateAsync({
+                                cohortId: selectedClass.id,
+                                userId: professorId,
+                              }),
+                            'Vínculo do professor revogado.',
+                          )
+                        }
                         type="button"
                       >
                         Revogar
                       </button>
-                    </div>
-                  ))}
-                  {selectedClass.professors.length === 0 && (
-                    <p className="px-4 py-4 text-sm text-vince-muted">
-                      Nenhum professor designado.
-                    </p>
-                  )}
-                </div>
-              </div>
+                    )}
+                  </div>
+                ))}
+                {professorIds.length === 0 && (
+                  <p className="px-4 py-4 text-sm text-vince-muted">Nenhum professor designado.</p>
+                )}
+              </ListBox>
 
-              <div className="rounded-lg border border-vince-border">
-                <div className="border-b border-vince-border px-4 py-3 font-bold text-vince-text">
-                  Convites ativos
-                </div>
-                <div className="divide-y divide-vince-border">
-                  {selectedClass.invitations.map((invitation) => (
-                    <div className="px-4 py-3" key={invitation.code}>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <span className="break-all font-bold text-vince-primary">
-                          {invitation.code}
-                        </span>
-                        <StatusBadge
-                          label={invitation.status === 'active' ? 'Ativo' : 'Revogado'}
-                          tone={invitation.status === 'active' ? 'success' : 'muted'}
-                        />
-                      </div>
-                      <p className="mt-1 text-sm text-vince-muted">
-                        Validade: {invitation.expiresAt} · Usos: {invitation.uses}
-                      </p>
-                      {invitation.status === 'active' && (
-                        <button
-                          aria-label={`Revogar convite ${invitation.code}`}
-                          className="mt-2 min-h-10 text-sm font-semibold text-vince-primary"
-                          onClick={() => {
-                            setClassGroups((current) =>
-                              current.map((group) =>
-                                group.id === selectedClass.id
-                                  ? {
-                                      ...group,
-                                      invitations: group.invitations.map((item) =>
-                                        item.code === invitation.code
-                                          ? { ...item, status: 'revoked' }
-                                          : item,
-                                      ),
-                                    }
-                                  : group,
-                              ),
-                            );
-                            toast.success('Convite revogado na demonstração.');
-                          }}
-                          type="button"
-                        >
-                          Revogar convite
-                        </button>
-                      )}
-                    </div>
+              {details.enrollments.data && (
+                <ListBox title="Alunos matriculados">
+                  {enrollments.map((enrollment) => (
+                    <p className="px-4 py-3 text-sm text-vince-muted" key={enrollment.id}>
+                      {names.nameOf(enrollment.userId)}
+                    </p>
                   ))}
-                  {selectedClass.invitations.length === 0 && (
+                  {enrollments.length === 0 && (
+                    <p className="px-4 py-4 text-sm text-vince-muted">Nenhum aluno matriculado.</p>
+                  )}
+                </ListBox>
+              )}
+
+              {details.invitations.data && (
+                <ListBox title="Convites">
+                  {details.invitations.data.map((invitation) => {
+                    const active = invitation.state === 'ACTIVE';
+                    return (
+                      <div className="px-4 py-3" key={invitation.invitationId}>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span className="break-all font-bold text-vince-primary">
+                            Convite {invitation.invitationId.slice(-6).toUpperCase()}
+                          </span>
+                          <StatusBadge
+                            label={
+                              active
+                                ? 'Ativo'
+                                : invitation.state === 'REVOKED'
+                                  ? 'Revogado'
+                                  : 'Encerrado'
+                            }
+                            tone={active ? 'success' : 'muted'}
+                          />
+                        </div>
+                        <p className="mt-1 text-sm text-vince-muted">
+                          Validade:{' '}
+                          {invitation.expiresAt ? formatInstant(invitation.expiresAt) : '—'} · Usos:{' '}
+                          {invitation.useCount ?? 0}
+                        </p>
+                        {active && can('INVITATION:REVOKE') && (
+                          <button
+                            aria-label={`Revogar convite ${invitation.invitationId.slice(-6).toUpperCase()}`}
+                            className="mt-2 min-h-10 text-sm font-semibold text-vince-primary"
+                            onClick={() =>
+                              void run(
+                                () =>
+                                  mutations.revokeInvitation.mutateAsync({
+                                    cohortId: selectedClass.id,
+                                    invitationId: invitation.invitationId,
+                                  }),
+                                'Convite revogado.',
+                              )
+                            }
+                            type="button"
+                          >
+                            Revogar convite
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {details.invitations.data.length === 0 && (
                     <p className="px-4 py-4 text-sm text-vince-muted">
-                      Nenhum convite disponível para esta turma.
+                      Nenhum convite emitido para esta turma.
                     </p>
                   )}
-                </div>
-              </div>
+                </ListBox>
+              )}
             </div>
           )}
           {!selectedClass && (
@@ -467,16 +510,29 @@ export function ClassesPage() {
   );
 }
 
+function ListBox({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <div className="rounded-lg border border-vince-border">
+      <div className="border-b border-vince-border px-4 py-3 font-bold text-vince-text">
+        {title}
+      </div>
+      <div className="divide-y divide-vince-border">{children}</div>
+    </div>
+  );
+}
+
 function ClassCard({
-  classGroup,
+  cohort,
+  courseName,
   onSelect,
   selected,
 }: {
-  classGroup: ClassGroup;
+  cohort: CohortDto;
+  courseName: string;
   onSelect: () => void;
   selected: boolean;
 }) {
-  const view = statusView[classGroup.status];
+  const view = statusView[statusOfCohort(cohort)];
 
   return (
     <article className="rounded-lg border border-vince-border bg-white p-6 shadow-sm">
@@ -484,10 +540,10 @@ function ClassCard({
         <div>
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <StatusBadge label={view.label} tone={view.tone} />
-            <span className="text-sm font-semibold text-vince-muted">{classGroup.term}</span>
+            <span className="text-sm font-semibold text-vince-muted">{cohort.term}</span>
           </div>
-          <h2 className="text-2xl font-extrabold text-vince-text">{classGroup.name}</h2>
-          <p className="mt-2 text-vince-muted">{classGroup.course}</p>
+          <h2 className="text-2xl font-extrabold text-vince-text">{cohort.identification}</h2>
+          <p className="mt-2 text-vince-muted">{courseName}</p>
         </div>
         <Button
           aria-pressed={selected}
@@ -499,10 +555,10 @@ function ClassCard({
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 border-t border-vince-border pt-5 lg:grid-cols-4">
-        <Info label="Início" value={classGroup.startDate} />
-        <Info label="Fim" value={classGroup.endDate} />
-        <Info label="Alunos" value={String(classGroup.students)} />
-        <Info label="Professores" value={String(classGroup.professors.length)} />
+        <Info label="Início" value={formatDate(cohort.startsAt)} />
+        <Info label="Fim" value={formatDate(cohort.endsAt)} />
+        <Info label="Período" value={cohort.term} />
+        <Info label="Situação" value={cohort.active ? 'Ativa' : 'Desativada'} />
       </div>
     </article>
   );
