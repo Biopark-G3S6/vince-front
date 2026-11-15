@@ -67,7 +67,7 @@ export function ArticleList({ title }: { title: string }) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {destinations
-                    .filter((destination) => canAccessSection(user.role, destination.section))
+                    .filter((destination) => canAccessSection(user, destination.section))
                     .map((destination, index) => (
                       <a
                         className={

@@ -6,17 +6,18 @@ import { toast } from 'sonner';
 import { Button, ConfirmDialog, TrashIcon } from '@shared/ui';
 
 import {
-  makeInitials,
-  validateInstitution,
-  type Institution,
-  type InstitutionAdmin,
-} from '../model/institution';
+  useInstitutionAdmins,
+  useInstitutionMutations,
+  type InstitutionInput,
+} from '../api/institutionApi';
+import { describeInstitutionError } from '../model/errors';
+import { validateInstitution, type Institution } from '../model/institution';
 
 type InstitutionDetailsDialogProps = {
   institution: Institution | null;
   onClose: () => void;
   onDeactivate: (institutionId: string) => void;
-  onUpdate: (institution: Institution) => void;
+  onUpdate: (institutionId: string, input: InstitutionInput) => void;
 };
 
 type InstitutionForm = Pick<
@@ -43,8 +44,10 @@ export function InstitutionDetailsDialog({
   const titleId = useId();
   const descriptionId = useId();
   const [form, setForm] = useState<InstitutionForm>(emptyForm);
-  const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  const [invitationUrl, setInvitationUrl] = useState('');
+  const admins = useInstitutionAdmins(institution?.id ?? null).data ?? [];
+  const mutations = useInstitutionMutations();
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const loadedInstitutionId = useRef<string | null>(null);
 
@@ -65,8 +68,8 @@ export function InstitutionDetailsDialog({
       city: institution.city,
       state: institution.state,
     });
-    setAdminName('');
     setAdminEmail('');
+    setInvitationUrl('');
     setConfirmDeactivate(false);
   }, [institution]);
 
@@ -89,55 +92,41 @@ export function InstitutionDetailsDialog({
       return;
     }
 
-    onUpdate({
-      ...currentInstitution,
-      name: form.name.trim(),
-      acronym: form.acronym.trim().toUpperCase(),
-      legalId: form.legalId.trim(),
-      domain: form.domain.trim().toLowerCase(),
-      supportEmail: form.supportEmail.trim().toLowerCase(),
-      city: form.city.trim(),
-      state: form.state.trim().toUpperCase(),
-    });
-    toast.success('Dados da instituição atualizados.');
+    onUpdate(currentInstitution.id, form);
   }
 
-  function assignAdmin(event: FormEvent<HTMLFormElement>) {
+  async function assignAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!adminEmail.trim()) return;
 
-    if (!adminName.trim() || !adminEmail.trim()) {
-      toast.error('Informe o nome e o e-mail do administrador.');
-      return;
+    try {
+      const result = await mutations.assignAdmin.mutateAsync({
+        institutionId: currentInstitution.id,
+        email: adminEmail,
+      });
+      setAdminEmail('');
+      if (result.kind === 'invited') {
+        setInvitationUrl(`${window.location.origin}${result.url}`);
+        toast.success('Sem conta na instituição: convite de administrador emitido.');
+      } else {
+        setInvitationUrl('');
+        toast.success('Administrador designado.');
+      }
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
     }
-
-    const email = adminEmail.trim().toLowerCase();
-    const exists = currentInstitution.admins.some((admin) => admin.email.toLowerCase() === email);
-
-    if (exists) {
-      toast.error('Este administrador já está vinculado à instituição.');
-      return;
-    }
-
-    const newAdmin: InstitutionAdmin = {
-      id: crypto.randomUUID(),
-      initials: makeInitials(adminName),
-      name: adminName.trim(),
-      email,
-      tone: 'primary',
-    };
-
-    onUpdate({ ...currentInstitution, admins: [...currentInstitution.admins, newAdmin] });
-    setAdminName('');
-    setAdminEmail('');
-    toast.success('Administrador designado.');
   }
 
-  function revokeAdmin(adminId: string) {
-    onUpdate({
-      ...currentInstitution,
-      admins: currentInstitution.admins.filter((admin) => admin.id !== adminId),
-    });
-    toast.success('Vínculo do administrador revogado.');
+  async function revokeAdmin(adminId: string) {
+    try {
+      await mutations.revokeAdmin.mutateAsync({
+        institutionId: currentInstitution.id,
+        userId: adminId,
+      });
+      toast.success('Vínculo do administrador revogado.');
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+    }
   }
 
   const inactive = currentInstitution.status === 'inactive';
@@ -179,12 +168,9 @@ export function InstitutionDetailsDialog({
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <SummaryMetric label="Cursos ativos" value={String(currentInstitution.coursesActive)} />
-            <SummaryMetric
-              label="Administradores"
-              value={String(currentInstitution.admins.length)}
-            />
-            <SummaryMetric label="Domínio" value={currentInstitution.domain} />
+            <SummaryMetric label="Sigla" value={currentInstitution.acronym} />
+            <SummaryMetric label="Administradores" value={String(admins.length)} />
+            <SummaryMetric label="Domínio" value={currentInstitution.domain || '—'} />
           </div>
 
           <form
@@ -201,7 +187,7 @@ export function InstitutionDetailsDialog({
               />
               <Field
                 label="Sigla"
-                maxLength={8}
+                maxLength={20}
                 onChange={(value) => updateForm('acronym', value)}
                 required
                 value={form.acronym}
@@ -211,13 +197,11 @@ export function InstitutionDetailsDialog({
               <Field
                 label="CNPJ / identificador"
                 onChange={(value) => updateForm('legalId', value)}
-                required
                 value={form.legalId}
               />
               <Field
                 label="E-mail de suporte"
                 onChange={(value) => updateForm('supportEmail', value)}
-                required
                 type="email"
                 value={form.supportEmail}
               />
@@ -232,14 +216,12 @@ export function InstitutionDetailsDialog({
               <Field
                 label="Cidade"
                 onChange={(value) => updateForm('city', value)}
-                required
                 value={form.city}
               />
               <Field
                 label="UF"
                 maxLength={2}
                 onChange={(value) => updateForm('state', value)}
-                required
                 value={form.state}
               />
             </div>
@@ -259,8 +241,8 @@ export function InstitutionDetailsDialog({
             </div>
 
             <div className="mt-5 space-y-3">
-              {currentInstitution.admins.length > 0 ? (
-                currentInstitution.admins.map((admin) => (
+              {admins.length > 0 ? (
+                admins.map((admin) => (
                   <div
                     className="flex flex-col gap-3 rounded-lg border border-[#ead9dd] bg-[#fffafa] p-4 sm:flex-row sm:items-center sm:justify-between"
                     key={admin.id}
@@ -276,7 +258,7 @@ export function InstitutionDetailsDialog({
                     </div>
                     <Button
                       aria-label={`Revogar administrador ${admin.name}`}
-                      onClick={() => revokeAdmin(admin.id)}
+                      onClick={() => void revokeAdmin(admin.id)}
                       size="sm"
                       type="button"
                       variant="outline"
@@ -294,15 +276,9 @@ export function InstitutionDetailsDialog({
             </div>
 
             <form
-              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-              onSubmit={assignAdmin}
+              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]"
+              onSubmit={(event) => void assignAdmin(event)}
             >
-              <Field
-                label="Nome do administrador"
-                onChange={setAdminName}
-                required
-                value={adminName}
-              />
               <Field
                 label="E-mail do administrador"
                 onChange={setAdminEmail}
@@ -310,10 +286,18 @@ export function InstitutionDetailsDialog({
                 type="email"
                 value={adminEmail}
               />
-              <Button className="self-end" type="submit">
+              <Button className="self-end" disabled={mutations.assignAdmin.isPending} type="submit">
                 Designar
               </Button>
             </form>
+            {invitationUrl && (
+              <p
+                className="mt-3 break-all rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900"
+                role="status"
+              >
+                Link do convite: <span className="font-semibold">{invitationUrl}</span>
+              </p>
+            )}
           </section>
 
           <section className="mt-6 rounded-lg border border-vince-border bg-[#fffafa] p-5">
@@ -330,7 +314,6 @@ export function InstitutionDetailsDialog({
                     return;
                   }
                   onDeactivate(currentInstitution.id);
-                  toast.success('Instituição reativada.');
                 }}
                 type="button"
                 variant={inactive ? 'primary' : 'outline'}
@@ -353,7 +336,6 @@ export function InstitutionDetailsDialog({
         onConfirm={() => {
           onDeactivate(currentInstitution.id);
           setConfirmDeactivate(false);
-          toast.success('Instituição desativada.');
         }}
         onOpenChange={setConfirmDeactivate}
         open={confirmDeactivate}

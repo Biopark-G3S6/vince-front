@@ -21,8 +21,9 @@ import {
 } from '@features/access';
 import {
   canAccessSection,
+  IDENTITY_KEY,
   ShellSlotsProvider,
-  useAuthenticatedUser,
+  useIdentity,
   useSignOut,
   type AdminSection,
 } from '@features/admin';
@@ -33,6 +34,7 @@ import { InstitutionsPage } from '@features/institutions';
 import { ProgressPage } from '@features/progress';
 import { ReviewCyclePage } from '@features/review';
 import { LanguageSettingsPage } from '@features/settings';
+import { setUnauthorizedHandler } from '@shared/api/http';
 import { subscribeMockDb } from '@shared/api/mockDb';
 import '@shared/i18n';
 
@@ -127,7 +129,12 @@ function resolveRoute(pathname: string): RouteKey {
     return 'recoverAccess';
   }
 
-  if (pathname === '/definir-senha' || pathname === '/reset-password') {
+  if (
+    pathname === '/definir-senha' ||
+    pathname === '/reset-password' ||
+    pathname === '/password/reset' ||
+    /^\/invitations\/[^/]+$/.test(pathname)
+  ) {
     return 'passwordSetup';
   }
 
@@ -211,13 +218,36 @@ function useRoute() {
 }
 
 export function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ShellSlotsProvider slots={shellSlots}>
+        <AppRoutes />
+      </ShellSlotsProvider>
+      <Toaster closeButton richColors />
+    </QueryClientProvider>
+  );
+}
+
+const loading = (
+  <div
+    className="flex min-h-screen items-center justify-center bg-vince-surface p-6 text-vince-muted"
+    role="status"
+  >
+    Carregando a página…
+  </div>
+);
+
+function AppRoutes() {
   const { navigateTo, route } = useRoute();
-  const authenticatedUser = useAuthenticatedUser();
+  const identity = useIdentity();
+  const authenticatedUser = identity.data ?? null;
   const signOut = useSignOut();
   const protectedSection = routeSections[route];
   const permitted =
     !protectedSection ||
-    (authenticatedUser ? canAccessSection(authenticatedUser.role, protectedSection) : false);
+    (authenticatedUser ? canAccessSection(authenticatedUser, protectedSection) : false);
+  // A rota protegida não é desenhada antes de a identidade ser resolvida (PAD-SEG-020).
+  const resolving = Boolean(protectedSection) && identity.isPending;
   const visibleRoute: RouteKey =
     protectedSection && !authenticatedUser
       ? 'login'
@@ -225,11 +255,20 @@ export function App() {
         ? 'dashboard'
         : route;
 
-  // Outra aba alterou os dados simulados: as consultas são refeitas, o que entrega a
-  // mensagem a quem está com a discussão aberta, sem recarregar a página (RF-DSC-004).
+  // Outra aba alterou os dados simulados das telas ainda não integradas (RF-DSC-004).
   useEffect(() => subscribeMockDb(() => void queryClient.invalidateQueries()), []);
 
+  // 401 em qualquer chamada: a sessão acabou no servidor (ADR-0017 §16).
   useEffect(() => {
+    setUnauthorizedHandler(() => {
+      queryClient.setQueryData(IDENTITY_KEY, null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
+  useEffect(() => {
+    if (resolving) return;
+
     if (protectedSection && !authenticatedUser) {
       navigateTo('/entrar', true);
       return;
@@ -238,65 +277,47 @@ export function App() {
     if (protectedSection && !permitted) {
       navigateTo('/admin/dashboard', true);
     }
-  }, [authenticatedUser, navigateTo, permitted, protectedSection]);
+  }, [authenticatedUser, navigateTo, permitted, protectedSection, resolving]);
+
+  if (resolving) return loading;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ShellSlotsProvider slots={shellSlots}>
-        {/* Os catálogos de tradução são carregados sob demanda, por namespace (ADR-0026 §29). */}
-        <Suspense
-          fallback={
-            <div
-              className="flex min-h-screen items-center justify-center bg-vince-surface p-6 text-vince-muted"
-              role="status"
-            >
-              Carregando a página…
-            </div>
-          }
-        >
-          {visibleRoute === 'landing' && <AccessLandingPage />}
-          {visibleRoute === 'login' && (
-            <LoginPage
-              onAuthenticated={() => {
-                queryClient.clear();
-                navigateTo('/admin/dashboard');
-              }}
-              onPasswordSetup={() => navigateTo('/definir-senha')}
-            />
-          )}
-          {visibleRoute === 'recoverAccess' && <RecoverAccessPage />}
-          {visibleRoute === 'passwordSetup' && <PasswordSetupPage />}
-          {visibleRoute === 'dashboard' && <AcademicDashboardPage />}
-          {visibleRoute === 'institutions' && <InstitutionsPage />}
-          {visibleRoute === 'courses' && <CoursesPage />}
-          {visibleRoute === 'classes' && <ClassesPage />}
-          {visibleRoute === 'events' && <EventsPage />}
-          {visibleRoute === 'people' && <PeoplePage />}
-          {visibleRoute === 'teams' && <TeamsPage />}
-          {visibleRoute === 'articles' && <ArticlesPage />}
-          {visibleRoute === 'accessAccount' && (
-            <AccessAccountPage
-              onSignOut={() => {
-                signOut();
-                queryClient.clear();
-                window.sessionStorage.removeItem('vinceart.article');
-                window.sessionStorage.removeItem('vinceart.editor.identity');
-                navigateTo('/entrar', true);
-              }}
-            />
-          )}
-          {visibleRoute === 'review' && <ReviewCyclePage />}
-          {visibleRoute === 'discussion' && <DiscussionPage />}
-          {visibleRoute === 'notifications' && <NotificationsPage />}
-          {visibleRoute === 'assistance' && <AssistancePage />}
-          {visibleRoute === 'progress' && <ProgressPage />}
-          {visibleRoute === 'language' && <LanguageSettingsPage />}
-          {visibleRoute === 'editor' && <ArticleEditorPage />}
-          {visibleRoute === 'chooseTemplate' && <ChooseTemplatePage />}
-          {visibleRoute === 'editorPreview' && <PreviewPage />}
-        </Suspense>
-      </ShellSlotsProvider>
-      <Toaster closeButton richColors />
-    </QueryClientProvider>
+    /* Os catálogos de tradução são carregados sob demanda, por namespace (ADR-0026 §29). */
+    <Suspense fallback={loading}>
+      {visibleRoute === 'landing' && <AccessLandingPage />}
+      {visibleRoute === 'login' && (
+        <LoginPage onAuthenticated={() => navigateTo('/admin/dashboard')} />
+      )}
+      {visibleRoute === 'recoverAccess' && <RecoverAccessPage />}
+      {visibleRoute === 'passwordSetup' && <PasswordSetupPage />}
+      {visibleRoute === 'dashboard' && <AcademicDashboardPage />}
+      {visibleRoute === 'institutions' && <InstitutionsPage />}
+      {visibleRoute === 'courses' && <CoursesPage />}
+      {visibleRoute === 'classes' && <ClassesPage />}
+      {visibleRoute === 'events' && <EventsPage />}
+      {visibleRoute === 'people' && <PeoplePage />}
+      {visibleRoute === 'teams' && <TeamsPage />}
+      {visibleRoute === 'articles' && <ArticlesPage />}
+      {visibleRoute === 'accessAccount' && (
+        <AccessAccountPage
+          onSignOut={() => {
+            void signOut().then(() => {
+              window.sessionStorage.removeItem('vinceart.article');
+              window.sessionStorage.removeItem('vinceart.editor.identity');
+              navigateTo('/entrar', true);
+            });
+          }}
+        />
+      )}
+      {visibleRoute === 'review' && <ReviewCyclePage />}
+      {visibleRoute === 'discussion' && <DiscussionPage />}
+      {visibleRoute === 'notifications' && <NotificationsPage />}
+      {visibleRoute === 'assistance' && <AssistancePage />}
+      {visibleRoute === 'progress' && <ProgressPage />}
+      {visibleRoute === 'language' && <LanguageSettingsPage />}
+      {visibleRoute === 'editor' && <ArticleEditorPage />}
+      {visibleRoute === 'chooseTemplate' && <ChooseTemplatePage />}
+      {visibleRoute === 'editorPreview' && <PreviewPage />}
+    </Suspense>
   );
 }

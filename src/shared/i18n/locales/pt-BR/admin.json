@@ -59,7 +59,8 @@
     "advisor": "Professor",
     "student": "Aluno",
     "coordinator": "Coordenador",
-    "institutionAdmin": "Administrador"
+    "institutionAdmin": "Administrador institucional",
+    "systemAdmin": "Administrador do sistema"
   },
   "persona": {
     "label": "Perspectiva de demonstração",

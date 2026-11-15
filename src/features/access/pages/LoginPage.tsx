@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { authenticateDemoUser, demoAccounts, useSignIn, type DemoUser } from '@features/admin';
-import { ArrowRightIcon, LockIcon, Notice, WarningIcon } from '@shared/ui';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { IDENTITY_KEY } from '@features/admin';
+import { getErrorCode } from '@shared/api/apiError';
+import { http } from '@shared/api/http';
+import { ArrowRightIcon, LockIcon, WarningIcon } from '@shared/ui';
 
 import { BrandMark } from '../components/BrandMark';
 
 type LoginPageProps = {
-  onAuthenticated: (user: DemoUser) => void;
-  onPasswordSetup: () => void;
+  onAuthenticated: () => void;
 };
 
 const authenticationError =
@@ -17,38 +20,40 @@ const authenticationError =
 const inactiveInstitutionError =
   'A instituição vinculada a esta conta está desativada. Entre em contato com o suporte institucional.';
 
-export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) {
-  const signIn = useSignIn();
+const unavailableError = 'Não foi possível entrar agora. Tente novamente em instantes.';
+
+/** RF-ACS-001: autenticação por sessão opaca em cookie (ADR-0013). */
+export function LoginPage({ onAuthenticated }: LoginPageProps) {
+  const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSubmitting(true);
 
-    const user = authenticateDemoUser(email, password);
-
-    if (user) {
+    try {
+      await http.post('/sessions', { email: email.trim(), password }, { silent401: true });
       setErrorMessage('');
       window.sessionStorage.removeItem('vinceart.article');
       window.sessionStorage.removeItem('vinceart.editor.identity');
-      signIn(user.id);
-      onAuthenticated(user);
-      return;
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== IDENTITY_KEY[0] });
+      await queryClient.refetchQueries({ queryKey: IDENTITY_KEY });
+      onAuthenticated();
+    } catch (error) {
+      const code = getErrorCode(error);
+      setErrorMessage(
+        code === 'INSTITUTION_INACTIVE'
+          ? inactiveInstitutionError
+          : code === 'AUTHENTICATION_FAILED' || code === 'VALIDATION_FAILED'
+            ? authenticationError
+            : unavailableError,
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    if (email.trim() === 'convite@vinceart.edu.br') {
-      setErrorMessage('');
-      onPasswordSetup();
-      return;
-    }
-
-    if (email.trim() === 'inativo@vinceart.edu.br') {
-      setErrorMessage(inactiveInstitutionError);
-      return;
-    }
-
-    setErrorMessage(authenticationError);
   }
 
   return (
@@ -86,32 +91,7 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
             <h1 className="mt-5 text-2xl font-extrabold text-vince-text">Entrar na plataforma</h1>
           </div>
 
-          <Notice className="mt-6" title="Acesso de demonstração">
-            Escolha um perfil. A senha de todos os acessos é{' '}
-            <span className="font-semibold">vince123</span>.
-          </Notice>
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Perfis de demonstração">
-            {demoAccounts.map((account) => (
-              <button
-                className="min-w-0 rounded-padrao border border-vince-border bg-white px-3 py-3 text-left transition-colors hover:border-vince-primary hover:bg-vince-tertiary"
-                key={account.role}
-                onClick={() => {
-                  setEmail(account.email);
-                  setPassword('vince123');
-                  setErrorMessage('');
-                }}
-                type="button"
-              >
-                <span className="block font-bold text-vince-primary">{account.label}</span>
-                <span className="mt-1 block break-all text-xs leading-5 text-vince-muted">
-                  {account.email}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+          <form className="mt-8 space-y-5" onSubmit={(event) => void handleSubmit(event)}>
             {errorMessage && (
               <div
                 className="flex gap-3 rounded-padrao border border-red-300 bg-red-50 px-5 py-4 text-red-950"
@@ -167,7 +147,8 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
             </div>
 
             <button
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-padrao bg-vince-primary text-lg font-bold text-white transition-colors hover:bg-[#571424]"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-padrao bg-vince-primary text-lg font-bold text-white transition-colors hover:bg-[#571424] disabled:opacity-60"
+              disabled={submitting}
               type="submit"
             >
               Entrar

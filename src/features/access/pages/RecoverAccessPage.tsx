@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
+import { http } from '@shared/api/http';
 import { ArrowLeftIcon, CheckCircleIcon, MailIcon } from '@shared/ui';
 
 import { BrandMark } from '../components/BrandMark';
@@ -8,10 +9,25 @@ import { BrandMark } from '../components/BrandMark';
 export function RecoverAccessPage() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  /**
+   * RF-ACS-003: a resposta é a mesma exista ou não a conta — o servidor não revela quem
+   * está cadastrado (204 em ambos os casos).
+   */
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSent(true);
+    setSubmitting(true);
+    setFailed(false);
+    try {
+      await http.post('/password/recovery', { email: email.trim() });
+      setSent(true);
+    } catch {
+      setFailed(true);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -25,11 +41,12 @@ export function RecoverAccessPage() {
           </span>
           <h1 className="mt-5 text-3xl font-extrabold">Recuperar acesso</h1>
           <p className="mt-3 text-lg leading-7 text-vince-muted">
-            Experimente a recuperação de acesso. Nesta demonstração, nenhum e-mail é enviado.
+            Informe o e-mail da sua conta. Se ele estiver cadastrado, você receberá as instruções
+            para definir uma nova senha.
           </p>
         </div>
 
-        <form className="mt-9 space-y-7" onSubmit={handleSubmit}>
+        <form className="mt-9 space-y-7" onSubmit={(event) => void handleSubmit(event)}>
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-vince-muted">E-mail</span>
             <span className="relative block">
@@ -50,7 +67,8 @@ export function RecoverAccessPage() {
           </label>
 
           <button
-            className="h-12 w-full rounded-padrao bg-vince-primary text-base font-bold text-white transition-colors hover:bg-[#571424]"
+            className="h-12 w-full rounded-padrao bg-vince-primary text-base font-bold text-white transition-colors hover:bg-[#571424] disabled:opacity-60"
+            disabled={submitting}
             type="submit"
           >
             Enviar instruções
@@ -63,15 +81,18 @@ export function RecoverAccessPage() {
             >
               <p className="flex items-start gap-2">
                 <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                Solicitação de demonstração registrada. Você pode experimentar a definição de senha.
+                Solicitação registrada. Se o e-mail estiver cadastrado, as instruções chegarão em
+                instantes.
               </p>
-              <a
-                className="mt-3 inline-flex font-bold text-green-900 underline"
-                href="/definir-senha"
-              >
-                Abrir fluxo de redefinição
-              </a>
             </div>
+          )}
+          {failed && (
+            <p
+              className="rounded-padrao border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900"
+              role="alert"
+            >
+              Não foi possível registrar a solicitação. Verifique o e-mail e tente novamente.
+            </p>
           )}
         </form>
 

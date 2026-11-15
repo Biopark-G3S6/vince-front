@@ -32,20 +32,27 @@ export function makeInitials(name: string) {
     .join('');
 }
 
+/** Regras do contrato (`institution-location`): nome e sigla obrigatórios; os demais, opcionais. */
 export function validateInstitution(
   institution: Pick<
     Institution,
     'name' | 'acronym' | 'legalId' | 'domain' | 'supportEmail' | 'city' | 'state'
   >,
 ) {
-  if (Object.values(institution).some((value) => !value.trim())) {
-    return 'Preencha todos os dados de identificação com valores válidos.';
+  if (!institution.name.trim() || !institution.acronym.trim()) {
+    return 'Informe o nome e a sigla da instituição.';
   }
-  if (!/^[a-z]{2}$/i.test(institution.state.trim())) {
+  if (institution.state.trim() && !/^[a-z]{2}$/i.test(institution.state.trim())) {
     return 'Informe a UF com duas letras.';
   }
-  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(institution.domain.trim())) {
+  if (
+    institution.domain.trim() &&
+    !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(institution.domain.trim())
+  ) {
     return 'Informe apenas o domínio institucional, como instituicao.edu.br.';
+  }
+  if (institution.legalId.trim() && institution.legalId.replace(/\D/g, '').length !== 14) {
+    return 'O CNPJ deve ter 14 dígitos.';
   }
   return null;
 }
