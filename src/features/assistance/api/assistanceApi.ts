@@ -2,12 +2,14 @@ import { currentArticle, DEMO_ARTICLE_ID } from '@features/articles';
 import { citationAuthors, getArticleReferences, referenceToText } from '@features/editor';
 import { getReviewCycle, latestSubmission } from '@features/review';
 import { ApiError } from '@shared/api/apiError';
+import { apiRequest, isBackendEnabled, requireUuid } from '@shared/api/client';
 import { createMockCollection, respond } from '@shared/api/mockDb';
 
 import {
   buildChangeSummary,
   checkStructureAndReferences,
   type AuthorshipSignals,
+  type ChangeSummary,
   type ComplianceFinding,
   type ConsentState,
   type SimilarityResult,
@@ -83,11 +85,65 @@ function assertAdvisor(actorId: string) {
 }
 
 export function getConsent() {
+  if (isBackendEnabled()) {
+    return apiRequest<{
+      institutionId: string;
+      consented: boolean;
+      consentedAt: string | null;
+      configuration: Record<string, unknown>;
+    }>('/profile').then(async (profile) => {
+      if (!profile.institutionId) throw new ApiError('RESOURCE_NOT_FOUND');
+      const consent = await apiRequest<{
+        institutionId: string;
+        consented: boolean;
+        consentedAt: string | null;
+        revokedAt: string | null;
+        configuration: Record<string, unknown>;
+      }>(`/institutions/${requireUuid(profile.institutionId)}/ai-consent`);
+      const version = String(consent.configuration.declarationVersion ?? '');
+      return {
+        active: consent.consented,
+        declarationVersion: version,
+        history: [
+          ...(consent.consentedAt
+            ? [
+                {
+                  action: 'GRANTED' as const,
+                  at: consent.consentedAt,
+                  by: 'Administração institucional',
+                  declarationVersion: version,
+                },
+              ]
+            : []),
+          ...(consent.revokedAt
+            ? [
+                {
+                  action: 'REVOKED' as const,
+                  at: consent.revokedAt,
+                  by: 'Administração institucional',
+                  declarationVersion: version,
+                },
+              ]
+            : []),
+        ],
+        institution: consent.institutionId,
+      } satisfies ConsentState;
+    });
+  }
   return respond(() => consentDb.read());
 }
 
 /** RF-IAA-005 — Registrar ou revogar o consentimento da instituição. */
 export function setConsent(actorId: string, active: boolean) {
+  if (isBackendEnabled()) {
+    return apiRequest<{ institutionId: string; consented: boolean }>('/profile').then((profile) => {
+      if (!profile.institutionId) throw new ApiError('RESOURCE_NOT_FOUND');
+      return apiRequest(`/institutions/${requireUuid(profile.institutionId)}/ai-consent`, {
+        body: { consented: active },
+        method: 'PUT',
+      });
+    });
+  }
   return respond(() => {
     if (actorId !== ADMIN_ID) {
       throw new ApiError('PERMISSION_DENIED');
@@ -107,7 +163,24 @@ export function setConsent(actorId: string, active: boolean) {
 }
 
 /** RF-IAA-001 — Resumir as alterações da entrega. */
-export async function getChangeSummary(actorId: string) {
+export async function getChangeSummary(actorId: string): Promise<ChangeSummary> {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    const response = await apiRequest<{
+      result: { summary: string; unchangedRemarks: string[]; unmetRemarks: string[] };
+    }>(`/articles/${articleId}/assistance/summary`, { body: {}, method: 'POST' });
+    const cycle = await getReviewCycle(actorId);
+    const calculated = buildChangeSummary(cycle);
+    if (!calculated) throw new ApiError('NO_PREVIOUS_SUBMISSION');
+    const unchangedIds = new Set(response.result.unchangedRemarks);
+    const unmetIds = new Set(response.result.unmetRemarks);
+    return {
+      ...calculated,
+      aiSummary: response.result.summary,
+      unchangedRemarks: cycle.remarks.filter((remark) => unchangedIds.has(remark.id)),
+      insufficientRemarks: cycle.remarks.filter((remark) => unmetIds.has(remark.id)),
+    };
+  }
   assertAdvisor(actorId);
 
   // Sem consentimento vigente, o conteúdo não é submetido a serviço externo (RF-IAA-005 RN1).
@@ -132,6 +205,36 @@ export async function getChangeSummary(actorId: string) {
 
 /** RF-IAA-002 — Verificar a conformidade do artigo à norma (ABNT). */
 export async function runComplianceCheck(actorId: string) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    const result = await apiRequest<{
+      checkedAt: string;
+      issues: Array<{
+        code: string;
+        category: string;
+        severity: string;
+        path: string | null;
+        referenceId?: string;
+        evidence?: string;
+      }>;
+    }>(`/articles/${articleId}/compliance-checks`, { body: {}, method: 'POST' });
+    const categories: Record<string, ComplianceFinding['category']> = {
+      FORMATTING: 'formatting',
+      REFERENCES: 'references',
+      STRUCTURE: 'structure',
+    };
+    return {
+      checkedAt: result.checkedAt,
+      findings: result.issues.map((issue, index) => ({
+        category: categories[issue.category] ?? 'structure',
+        code: issue.code,
+        excerpt: issue.evidence,
+        id: issue.referenceId ?? `${issue.category}-${index}`,
+        location: issue.path ?? '',
+        params: {},
+      })),
+    };
+  }
   assertReach(actorId);
 
   const cycle = await getReviewCycle(actorId);
@@ -156,6 +259,36 @@ export async function runComplianceCheck(actorId: string) {
 
 /** RF-IAA-003 — Verificar a similaridade do artigo com o acervo interno. */
 export function runSimilarityCheck(actorId: string) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    return apiRequest<{
+      checkedAt: string;
+      corpusSize: number;
+      insufficientCorpus: boolean;
+      matches: Array<{
+        text: string;
+        sourceArticleId: string | null;
+        sourcePath: string | null;
+        tokenCount: number;
+        percentageOfArticle: number;
+      }>;
+    }>(`/articles/${articleId}/similarity-checks`, { body: {}, method: 'POST' }).then((result) => ({
+      checkedAt: result.checkedAt,
+      matches: result.matches.map((match, index) => ({
+        excerpt: match.text,
+        id: `${match.sourceArticleId ?? 'source'}-${index}`,
+        location: match.sourcePath ?? '',
+        origin: match.sourceArticleId
+          ? { article: match.sourceArticleId, team: '', year: '' }
+          : null,
+        share: match.percentageOfArticle / 100,
+      })),
+      totalShare: result.matches.reduce(
+        (total, match) => total + match.percentageOfArticle / 100,
+        0,
+      ),
+    }));
+  }
   return respond((): SimilarityResult => {
     assertReach(actorId);
 
@@ -199,6 +332,52 @@ export function runSimilarityCheck(actorId: string) {
 
 /** RF-IAA-004 — Consultar indícios sobre a autoria do texto. */
 export function getAuthorshipSignals(actorId: string) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    return apiRequest<{
+      sufficientHistory: boolean;
+      timeline: Array<{ authorId: string | null; createdAt: string; insertedCharacters: number }>;
+      largeInsertions: Array<{ authorId: string | null; createdAt: string; characters: number }>;
+      sessions: Array<{
+        authorId: string | null;
+        startedAt: string;
+        endedAt: string;
+        editCount: number;
+      }>;
+      authorship: Array<{ authorId: string; share: number }>;
+      importMetadata: Array<{ createdAt: string; metadata: unknown }>;
+    }>(`/articles/${articleId}/authorship-signals`).then((result) => ({
+      authorship: result.authorship.map((member) => ({
+        memberId: member.authorId,
+        name: member.authorId,
+        share: member.share,
+      })),
+      importMetadata: result.importMetadata.length
+        ? {
+            application: 'DOCX',
+            declaredAuthor: '',
+            editingMinutes: 0,
+            revisions: result.importMetadata.length,
+          }
+        : null,
+      largeInsertions: result.largeInsertions.map((insertion, index) => ({
+        at: insertion.createdAt,
+        author: insertion.authorId ?? '',
+        characters: insertion.characters,
+        id: `${insertion.authorId ?? 'author'}-${index}`,
+      })),
+      revisedShare: result.authorship.reduce((sum, member) => sum + member.share, 0),
+      sessions: result.sessions.map((session, index) => ({
+        author: session.authorId ?? '',
+        id: `${session.authorId ?? 'author'}-${index}`,
+        minutes: Math.max(
+          0,
+          Math.round((Date.parse(session.endedAt) - Date.parse(session.startedAt)) / 60_000),
+        ),
+        startedAt: session.startedAt,
+      })),
+    }));
+  }
   return respond((): AuthorshipSignals => {
     // Os indícios não são apresentados à equipe (RN3).
     assertAdvisor(actorId);

@@ -9,8 +9,15 @@ export {
   useCurrentUser,
   useSignIn,
   useSignOut,
+  identityToUser,
+  type BackendIdentity,
   type DemoUser,
   type Role,
 } from './model/persona';
-export { canAccessSection, sectionsForRole, type AdminSection } from './model/accessPolicy';
+export {
+  canAccessSection,
+  canAccessUserSection,
+  sectionsForRole,
+  type AdminSection,
+} from './model/accessPolicy';
 export { PersonaSwitch } from './components/PersonaSwitch';

@@ -177,7 +177,8 @@ export function useSetMargins() {
   const invalidate = useInvalidate();
 
   return useMutation({
-    mutationFn: (margins: Parameters<typeof setMargins>[1]) => setMargins(actor.id, margins),
+    mutationFn: (input: { margins: Parameters<typeof setMargins>[1]; content?: JSONContent }) =>
+      setMargins(actor.id, input.margins, input.content),
     onSuccess: invalidate,
   });
 }

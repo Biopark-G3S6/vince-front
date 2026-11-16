@@ -20,10 +20,13 @@ import {
   RecoverAccessPage,
 } from '@features/access';
 import {
-  canAccessSection,
+  canAccessUserSection,
   ShellSlotsProvider,
   useAuthenticatedUser,
+  identityToUser,
   useSignOut,
+  useSignIn,
+  type BackendIdentity,
   type AdminSection,
 } from '@features/admin';
 import { AssistancePage } from '@features/assistance';
@@ -34,6 +37,8 @@ import { ProgressPage } from '@features/progress';
 import { ReviewCyclePage } from '@features/review';
 import { LanguageSettingsPage } from '@features/settings';
 import { subscribeMockDb } from '@shared/api/mockDb';
+import { apiRequest, isBackendEnabled } from '@shared/api/client';
+import { i18n, resolveInitialLanguage } from '@shared/i18n';
 import '@shared/i18n';
 
 const queryClient = new QueryClient({
@@ -214,10 +219,12 @@ export function App() {
   const { navigateTo, route } = useRoute();
   const authenticatedUser = useAuthenticatedUser();
   const signOut = useSignOut();
+  const signIn = useSignIn();
+  const [serverAuthReady, setServerAuthReady] = useState(!isBackendEnabled());
   const protectedSection = routeSections[route];
   const permitted =
     !protectedSection ||
-    (authenticatedUser ? canAccessSection(authenticatedUser.role, protectedSection) : false);
+    (authenticatedUser ? canAccessUserSection(authenticatedUser, protectedSection) : false);
   const visibleRoute: RouteKey =
     protectedSection && !authenticatedUser
       ? 'login'
@@ -230,6 +237,40 @@ export function App() {
   useEffect(() => subscribeMockDb(() => void queryClient.invalidateQueries()), []);
 
   useEffect(() => {
+    if (!isBackendEnabled()) return;
+    let active = true;
+    const handleExpiredSession = () => {
+      signOut();
+      queryClient.clear();
+      window.sessionStorage.removeItem('vinceart.article');
+      window.sessionStorage.removeItem('vinceart.backend.article');
+      window.sessionStorage.removeItem('vinceart.editor.identity');
+      navigateTo('/entrar', true);
+    };
+    window.addEventListener('vince:authentication-failed', handleExpiredSession);
+    void apiRequest<BackendIdentity>('/identity')
+      .then((identity) => {
+        if (active) {
+          signIn(identityToUser(identity));
+          return i18n.changeLanguage(
+            identity.preferredLanguage ?? resolveInitialLanguage(null, navigator.languages),
+          );
+        }
+        return undefined;
+      })
+      .catch(() => {
+        if (active) signOut();
+      })
+      .finally(() => {
+        if (active) setServerAuthReady(true);
+      });
+    return () => {
+      active = false;
+      window.removeEventListener('vince:authentication-failed', handleExpiredSession);
+    };
+  }, [navigateTo, signIn, signOut]);
+
+  useEffect(() => {
     if (protectedSection && !authenticatedUser) {
       navigateTo('/entrar', true);
       return;
@@ -239,6 +280,17 @@ export function App() {
       navigateTo('/admin/dashboard', true);
     }
   }, [authenticatedUser, navigateTo, permitted, protectedSection]);
+
+  if (!serverAuthReady) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-vince-surface p-6 text-vince-muted"
+        role="status"
+      >
+        Verificando sessão…
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -277,11 +329,21 @@ export function App() {
           {visibleRoute === 'accessAccount' && (
             <AccessAccountPage
               onSignOut={() => {
-                signOut();
-                queryClient.clear();
-                window.sessionStorage.removeItem('vinceart.article');
-                window.sessionStorage.removeItem('vinceart.editor.identity');
-                navigateTo('/entrar', true);
+                void (async () => {
+                  if (isBackendEnabled()) {
+                    try {
+                      await apiRequest<void>('/sessions/current', { method: 'DELETE' });
+                    } catch {
+                      // A interface encerra o estado local mesmo que a sessão já tenha expirado.
+                    }
+                  }
+                  signOut();
+                  queryClient.clear();
+                  window.sessionStorage.removeItem('vinceart.article');
+                  window.sessionStorage.removeItem('vinceart.backend.article');
+                  window.sessionStorage.removeItem('vinceart.editor.identity');
+                  navigateTo('/entrar', true);
+                })();
               }}
             />
           )}

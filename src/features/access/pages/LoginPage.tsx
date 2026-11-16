@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { authenticateDemoUser, demoAccounts, useSignIn, type DemoUser } from '@features/admin';
+import {
+  authenticateDemoUser,
+  demoAccounts,
+  identityToUser,
+  useSignIn,
+  type BackendIdentity,
+  type DemoUser,
+} from '@features/admin';
+import { ApiError } from '@shared/api/apiError';
+import { apiRequest, isBackendEnabled } from '@shared/api/client';
 import { ArrowRightIcon, LockIcon, Notice, WarningIcon } from '@shared/ui';
 
 import { BrandMark } from '../components/BrandMark';
@@ -23,14 +32,38 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isBackendEnabled()) {
+      try {
+        const identity = await apiRequest<BackendIdentity>('/sessions', {
+          body: { email, password },
+          method: 'POST',
+        });
+        const user = identityToUser(identity);
+        window.sessionStorage.removeItem('vinceart.article');
+        window.sessionStorage.removeItem('vinceart.backend.article');
+        window.sessionStorage.removeItem('vinceart.editor.identity');
+        signIn(user);
+        setErrorMessage('');
+        onAuthenticated(user);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof ApiError && error.code === 'AUTHENTICATION_FAILED'
+            ? authenticationError
+            : 'Não foi possível conectar ao serviço de acesso. Tente novamente.',
+        );
+      }
+      return;
+    }
 
     const user = authenticateDemoUser(email, password);
 
     if (user) {
       setErrorMessage('');
       window.sessionStorage.removeItem('vinceart.article');
+      window.sessionStorage.removeItem('vinceart.backend.article');
       window.sessionStorage.removeItem('vinceart.editor.identity');
       signIn(user.id);
       onAuthenticated(user);
@@ -86,30 +119,38 @@ export function LoginPage({ onAuthenticated, onPasswordSetup }: LoginPageProps) 
             <h1 className="mt-5 text-2xl font-extrabold text-vince-text">Entrar na plataforma</h1>
           </div>
 
-          <Notice className="mt-6" title="Acesso de demonstração">
-            Escolha um perfil. A senha de todos os acessos é{' '}
-            <span className="font-semibold">vince123</span>.
-          </Notice>
+          {isBackendEnabled() ? (
+            <Notice className="mt-6" title="Acesso institucional">
+              Entre com a conta vinculada à sua instituição.
+            </Notice>
+          ) : (
+            <>
+              <Notice className="mt-6" title="Acesso de demonstração">
+                Escolha um perfil. A senha de todos os acessos é{' '}
+                <span className="font-semibold">vince123</span>.
+              </Notice>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Perfis de demonstração">
-            {demoAccounts.map((account) => (
-              <button
-                className="min-w-0 rounded-padrao border border-vince-border bg-white px-3 py-3 text-left transition-colors hover:border-vince-primary hover:bg-vince-tertiary"
-                key={account.role}
-                onClick={() => {
-                  setEmail(account.email);
-                  setPassword('vince123');
-                  setErrorMessage('');
-                }}
-                type="button"
-              >
-                <span className="block font-bold text-vince-primary">{account.label}</span>
-                <span className="mt-1 block break-all text-xs leading-5 text-vince-muted">
-                  {account.email}
-                </span>
-              </button>
-            ))}
-          </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Perfis de demonstração">
+                {demoAccounts.map((account) => (
+                  <button
+                    className="min-w-0 rounded-padrao border border-vince-border bg-white px-3 py-3 text-left transition-colors hover:border-vince-primary hover:bg-vince-tertiary"
+                    key={account.role}
+                    onClick={() => {
+                      setEmail(account.email);
+                      setPassword('vince123');
+                      setErrorMessage('');
+                    }}
+                    type="button"
+                  >
+                    <span className="block font-bold text-vince-primary">{account.label}</span>
+                    <span className="mt-1 block break-all text-xs leading-5 text-vince-muted">
+                      {account.email}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             {errorMessage && (

@@ -2,6 +2,8 @@
 import i18n, { type BackendModule, type ResourceKey } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
+import { apiRequest, isBackendEnabled } from '@shared/api/client';
+
 /**
  * Mecanismo de tradução do frontend (ADR-0026 §28 a §30, RF-INT-001).
  *
@@ -28,7 +30,9 @@ const languages: LanguageOption[] = [
 
 /** O português do Brasil é o único idioma publicado no lançamento (RF-INT-001 RN1). */
 export const supportedLanguages = languages.filter(
-  (language) => !language.preview || import.meta.env.DEV,
+  (language) =>
+    (!language.preview || import.meta.env.DEV) &&
+    (!isBackendEnabled() || language.code === DEFAULT_LANGUAGE),
 );
 
 const STORAGE_KEY = 'vinceart.language';
@@ -97,7 +101,9 @@ void i18n
   .use(lazyCatalogBackend)
   .use(initReactI18next)
   .init({
-    lng: resolveInitialLanguage(readStoredLanguage(), navigator.languages),
+    lng: isBackendEnabled()
+      ? resolveInitialLanguage(null, navigator.languages)
+      : resolveInitialLanguage(readStoredLanguage(), navigator.languages),
     fallbackLng: DEFAULT_LANGUAGE,
     supportedLngs: languages.map((language) => language.code),
     load: 'currentOnly',
@@ -124,6 +130,12 @@ i18n.on('languageChanged', (language) => {
 export async function changeLanguage(code: string) {
   if (!isSupportedLanguage(code)) {
     throw new Error('LANGUAGE_NOT_SUPPORTED');
+  }
+
+  if (isBackendEnabled()) {
+    await apiRequest('/profile', { body: { preferredLanguage: code }, method: 'PATCH' });
+    await i18n.changeLanguage(code);
+    return;
   }
 
   await i18n.changeLanguage(code);

@@ -16,6 +16,7 @@ import {
   type EventTemplate,
 } from '@features/articles';
 import { getErrorCode } from '@shared/api/apiError';
+import { isBackendEnabled } from '@shared/api/client';
 import {
   Button,
   CalendarIcon,
@@ -83,6 +84,7 @@ function displayDate(value: string | null | undefined) {
 
 export function EventsPage() {
   const user = useCurrentUser();
+  const backendMode = isBackendEnabled();
   const student = user.role === 'student';
   const professor = user.role === 'advisor';
   const directory = useEventDirectory();
@@ -145,6 +147,7 @@ export function EventsPage() {
 
   function handleAction(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault();
+    if (backendMode) return;
     const form = new FormData(submitEvent.currentTarget);
     const text = (key: string) => String(form.get(key) ?? '').trim();
     if (action === 'event') {
@@ -273,7 +276,7 @@ export function EventsPage() {
     <PageScaffold
       actions={
         !student && (
-          <Button disabled={templates.isLoading} onClick={() => setAction('event')}>
+          <Button disabled={backendMode || templates.isLoading} onClick={() => setAction('event')}>
             <PlusIcon className="h-5 w-5" />
             {createLabel}
           </Button>
@@ -291,6 +294,12 @@ export function EventsPage() {
       personaRoles={['institutionAdmin', 'coordinator', 'advisor', 'student']}
       title={student ? 'Eventos e inscrições' : professor ? 'Meus eventos' : 'Eventos oficiais'}
     >
+      {backendMode && (
+        <Notice className="mt-6" tone="warning">
+          O backend ainda não oferece cadastro de eventos, inscrições ou equipes. A escolha do
+          modelo prevista para a criação do evento ficará disponível quando essa API for incluída.
+        </Notice>
+      )}
       <AcademicActionDialog
         description={
           action === 'event'

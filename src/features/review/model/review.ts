@@ -12,7 +12,7 @@ export type Paragraph = {
 };
 
 export type Milestone = {
-  deadline: string;
+  deadline: string | null;
   id: string;
   name: string;
   order: number;

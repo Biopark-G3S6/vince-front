@@ -424,7 +424,7 @@ function Workspace({ actor, isNew = false, references, seed, session, state }: W
     const fixMargins = scope === 'document' && marginsOffNorm;
 
     if (fixMargins) {
-      setMargins.mutate(abntNorm.margins);
+      setMargins.mutate({ content: editor.getJSON(), margins: abntNorm.margins });
     }
 
     if (!hasChanges(report) && !fixMargins) {

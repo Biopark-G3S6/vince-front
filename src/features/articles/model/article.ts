@@ -34,6 +34,14 @@ export type Article = {
   milestones: ArticleMilestone[];
   team: string;
   title: string;
+  /** Resumo do backend usado pelas listas, sem substituir o ciclo detalhado. */
+  progress?: {
+    currentMilestoneId: string | null;
+    currentMilestoneOrder: number | null;
+    lastMilestoneOrder: number | null;
+    pendingRemarkCount: number;
+    status: 'STARTED' | 'IN_PROGRESS' | 'IN_REVIEW' | 'FINISHED';
+  };
 };
 
 export const DEMO_ARTICLE_ID = 'article-neural';

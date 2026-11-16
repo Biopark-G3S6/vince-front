@@ -26,6 +26,7 @@
   "summary": {
     "aiNotice": "Resumo gerado por serviço externo de inteligência artificial, com o consentimento da instituição. É subsídio ao orientador: não é registrado como apontamento nem apresentado à equipe.",
     "decisionNotice": "Nenhum apontamento é validado, reaberto ou dispensado a partir deste resumo. A decisão é sempre sua, na tela de correção.",
+    "aiSummaryTitle": "Síntese gerada para esta entrega",
     "changed": "Parágrafos alterados",
     "added": "Parágrafos novos",
     "removed": "Parágrafos removidos",

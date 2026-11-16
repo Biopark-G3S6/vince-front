@@ -5,12 +5,24 @@ export type Role = 'advisor' | 'student' | 'coordinator' | 'institutionAdmin';
 
 export type DemoUser = {
   email: string;
+  expertiseArea?: string | null;
   id: string;
   initials: string;
   institution: string;
   name: string;
+  permissions?: string[];
+  preferredLanguage?: string | null;
   researchArea: string;
   role: Role;
+};
+
+export type BackendIdentity = {
+  userId: string;
+  email: string;
+  name: string;
+  preferredLanguage: string | null;
+  roles: string[];
+  permissions: string[];
 };
 
 export const demoUsers: Record<Role, DemoUser> = {
@@ -66,21 +78,21 @@ export const demoAccounts = [
 const DEMO_PASSWORD = 'vince123';
 
 type SessionState = {
-  signIn: (userId: string) => void;
+  signIn: (user: DemoUser | string) => void;
   signOut: () => void;
-  userId: string | null;
+  user: DemoUser | null;
 };
 
 const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
-      signIn: (userId) => set({ userId: usersById[userId] ? userId : null }),
-      signOut: () => set({ userId: null }),
-      userId: null,
+      signIn: (user) => set({ user: typeof user === 'string' ? (usersById[user] ?? null) : user }),
+      signOut: () => set({ user: null }),
+      user: null,
     }),
     {
       name: 'vinceart.session',
-      partialize: (state) => ({ userId: state.userId }),
+      partialize: (state) => ({ user: state.user }),
       storage: createJSONStorage(() => window.sessionStorage),
     },
   ),
@@ -94,8 +106,38 @@ export function authenticateDemoUser(email: string, password: string): DemoUser 
 }
 
 export function useAuthenticatedUser(): DemoUser | null {
-  const userId = useSessionStore((state) => state.userId);
-  return userId ? (usersById[userId] ?? null) : null;
+  return useSessionStore((state) => state.user);
+}
+
+export function identityToUser(identity: BackendIdentity): DemoUser {
+  const roleCode = identity.roles.find((role) =>
+    ['SYSTEM_ADMIN', 'INSTITUTION_ADMIN', 'COORDINATOR', 'PROFESSOR', 'STUDENT'].includes(role),
+  );
+  const role: Role =
+    roleCode === 'SYSTEM_ADMIN' || roleCode === 'INSTITUTION_ADMIN'
+      ? 'institutionAdmin'
+      : roleCode === 'COORDINATOR'
+        ? 'coordinator'
+        : roleCode === 'PROFESSOR'
+          ? 'advisor'
+          : 'student';
+
+  return {
+    email: identity.email,
+    id: identity.userId,
+    initials: identity.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toLocaleUpperCase() ?? '')
+      .join(''),
+    institution: '',
+    name: identity.name,
+    permissions: identity.permissions,
+    preferredLanguage: identity.preferredLanguage,
+    researchArea: '',
+    role,
+  };
 }
 
 export function useCurrentUser(): DemoUser {

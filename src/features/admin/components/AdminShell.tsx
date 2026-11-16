@@ -27,7 +27,7 @@ import {
 
 import { cn } from '@shared/lib/cn';
 
-import { canAccessSection, type AdminSection } from '../model/accessPolicy';
+import { canAccessUserSection, type AdminSection } from '../model/accessPolicy';
 import { useCurrentUser } from '../model/persona';
 
 import { useShellSlots } from './ShellSlots';
@@ -72,7 +72,7 @@ export function AdminShell({ activeSection, children }: AdminShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState('');
   const menuToggleLabel = collapsed ? t('shell.expandMenu') : t('shell.collapseMenu');
-  const visibleItems = navItems.filter((item) => canAccessSection(currentUser.role, item.section));
+  const visibleItems = navItems.filter((item) => canAccessUserSection(currentUser, item.section));
   const itemLabel = (section: AdminSection) =>
     t(`roleNav.${currentUser.role}.${section}`, { defaultValue: t(`nav.${section}`) });
   const matchingItems = visibleItems.filter((item) =>

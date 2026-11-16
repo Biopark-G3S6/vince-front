@@ -10,6 +10,7 @@ import {
 
 /** Resumo das alterações entre duas entregas (RF-IAA-001). */
 export type ChangeSummary = {
+  aiSummary?: string;
   highlights: Array<{
     change: 'changed' | 'added' | 'removed';
     deleted: number;

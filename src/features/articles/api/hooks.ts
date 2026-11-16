@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@features/admin';
+import { isBackendEnabled } from '@shared/api/client';
 
 import {
   allowedScopes,
@@ -14,6 +15,7 @@ import {
   listEvents,
   listEventRegistrations,
   listTemplates,
+  listTemplateCourses,
   saveTemplate,
   registerForEvent,
   setEventRegistrationOpen,
@@ -31,10 +33,12 @@ export function useArticles() {
 
   return useQuery({
     queryFn: async () => {
-      const articles = await listArticles();
-
-      return articles.filter((article) => canReadArticle(user.id, article));
+      const articles = await listArticles(user.role);
+      return isBackendEnabled()
+        ? articles
+        : articles.filter((article) => canReadArticle(user.id, article));
     },
+    enabled: !isBackendEnabled() || user.permissions?.includes('ARTICLE:READ') === true,
     queryKey: ['registry', 'articles', user.id],
   });
 }
@@ -45,7 +49,11 @@ export function useEventDirectory() {
 
   return useQuery({
     queryFn: async () => ({
-      articles: (await listArticles()).filter((article) => canReadArticle(user.id, article)),
+      articles: isBackendEnabled()
+        ? user.permissions?.includes('ARTICLE:READ')
+          ? await listArticles(user.role)
+          : []
+        : (await listArticles()).filter((article) => canReadArticle(user.id, article)),
       events: await listEvents(user.id),
     }),
     queryKey: ['registry', 'directory', user.id],
@@ -58,11 +66,24 @@ export function useTemplates() {
 
   return useQuery({
     queryFn: async () => ({
-      events: await listEvents(user.id),
-      scopes: allowedScopes(user.id),
-      templates: await listTemplates(user.id),
+      events: isBackendEnabled() ? [] : await listEvents(user.id),
+      scopes: isBackendEnabled() ? [] : allowedScopes(user.id),
+      templates:
+        isBackendEnabled() && !user.permissions?.includes('TEMPLATE:READ')
+          ? []
+          : await listTemplates(user.id, user.permissions),
     }),
     queryKey: ['registry', 'templates', user.id],
+    retry: false,
+  });
+}
+
+export function useTemplateCourses() {
+  const user = useCurrentUser();
+  return useQuery({
+    enabled: isBackendEnabled() && user.permissions?.includes('TEMPLATE:CREATE') === true,
+    queryFn: listTemplateCourses,
+    queryKey: ['registry', 'template-courses', user.id],
     retry: false,
   });
 }
@@ -88,7 +109,7 @@ export const useSetTemplateActive = () =>
 
 export const useCreateEvent = () => useRegistryMutation<CreateEventInput, void>(createEvent);
 
-export const useChangeEventTemplate = () => useRegistryMutation<string, never>(changeEventTemplate);
+export const useChangeEventTemplate = () => useRegistryMutation<string, void>(changeEventTemplate);
 
 export const useCreateTeam = () => useRegistryMutation(createTeam);
 
@@ -97,7 +118,7 @@ export const useCreateArticle = () => useRegistryMutation(createArticle);
 export function useEventRegistrations() {
   const user = useCurrentUser();
   return useQuery({
-    queryFn: () => listEventRegistrations(user.id),
+    queryFn: () => (isBackendEnabled() ? Promise.resolve([]) : listEventRegistrations(user.id)),
     queryKey: ['registry', 'registrations', user.id],
   });
 }
