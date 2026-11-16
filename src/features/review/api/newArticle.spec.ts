@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createEvent, createTeam, currentArticle, listArticles } from '@features/articles';
 
@@ -15,8 +15,14 @@ const team = {
 };
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
   window.localStorage.clear();
   window.sessionStorage.clear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('criar equipe no evento (RF-EQP-001)', () => {
