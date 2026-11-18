@@ -3,7 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DirectoryUser } from '@shared/api/directory';
 import { http } from '@shared/api/http';
 
-import { makeInitials, type Institution, type InstitutionAdmin } from '../model/institution';
+import {
+  makeInitials,
+  type Institution,
+  type InstitutionAdmin,
+  type InstitutionInvitation,
+} from '../model/institution';
 
 /** O recurso como a API o entrega (`InstitutionDtoResponse`, institution-location). */
 type InstitutionDto = {
@@ -53,10 +58,6 @@ function toInstitution(dto: InstitutionDto): Institution {
     city: dto.city ?? '',
     state: dto.state ?? '',
     status: dto.active ? 'active' : 'inactive',
-    // A API não expõe data de cadastro nem contagem de cursos (triagem (d)).
-    createdAt: '',
-    coursesActive: 0,
-    admins: [],
   };
 }
 
@@ -113,6 +114,20 @@ export function useInstitutionAdmins(institutionId: string | null) {
   });
 }
 
+const invitationsKey = (institutionId: string | null) =>
+  ['institutions', institutionId, 'invitations'] as const;
+
+/** Os convites emitidos para a instituição, de qualquer situação (RF-ACS-009). */
+export function useInstitutionInvitations(institutionId: string | null) {
+  return useQuery({
+    queryKey: invitationsKey(institutionId),
+    queryFn: () => http.all<InstitutionInvitation>(`/institutions/${institutionId}/invitations`),
+    enabled: Boolean(institutionId),
+  });
+}
+
+const DAY = 24 * 3600 * 1000;
+
 export function useInstitutionMutations() {
   const client = useQueryClient();
   const refresh = () => client.invalidateQueries({ queryKey: KEY });
@@ -138,10 +153,19 @@ export function useInstitutionMutations() {
     }),
     /**
      * RF-INS-002: designa quem já tem conta na instituição; sem conta, emite convite
-     * dirigido de administrador institucional (RF-ACS-009) e devolve o link.
+     * dirigido de administrador institucional (RF-ACS-009), válido por `validDays`, e
+     * devolve o link. Aceito o convite, o backend cria o vínculo.
      */
     assignAdmin: useMutation({
-      mutationFn: async ({ institutionId, email }: { institutionId: string; email: string }) => {
+      mutationFn: async ({
+        institutionId,
+        email,
+        validDays = 7,
+      }: {
+        institutionId: string;
+        email: string;
+        validDays?: number;
+      }) => {
         const normalized = email.trim().toLowerCase();
         const found = await http.page<DirectoryUser>('/users', {
           institutionId,
@@ -153,19 +177,33 @@ export function useInstitutionMutations() {
           await http.post(`/institutions/${institutionId}/admins`, { userId: user.id });
           return { kind: 'assigned' as const };
         }
-        const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+        const expiresAt = new Date(Date.now() + validDays * DAY).toISOString();
         const issued = await http.post<{ id: string; url: string }>(
           `/institutions/${institutionId}/invitations`,
           { roleCode: 'INSTITUTION_ADMIN', targetEmail: normalized, expiresAt },
         );
         return { kind: 'invited' as const, url: issued.url };
       },
-      onSuccess: () => client.invalidateQueries({ queryKey: ADMINS_KEY }),
+      onSuccess: async (_result, { institutionId }) => {
+        await client.invalidateQueries({ queryKey: ADMINS_KEY });
+        await client.invalidateQueries({ queryKey: invitationsKey(institutionId) });
+      },
     }),
     revokeAdmin: useMutation({
       mutationFn: ({ institutionId, userId }: { institutionId: string; userId: string }) =>
         http.delete(`/institutions/${institutionId}/admins/${userId}`),
       onSuccess: () => client.invalidateQueries({ queryKey: ADMINS_KEY }),
+    }),
+    revokeInvitation: useMutation({
+      mutationFn: ({
+        institutionId,
+        invitationId,
+      }: {
+        institutionId: string;
+        invitationId: string;
+      }) => http.post(`/institutions/${institutionId}/invitations/${invitationId}/revocation`),
+      onSuccess: (_result, { institutionId }) =>
+        client.invalidateQueries({ queryKey: invitationsKey(institutionId) }),
     }),
   };
 }

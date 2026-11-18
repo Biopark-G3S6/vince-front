@@ -7,11 +7,38 @@ import { Button, ConfirmDialog, TrashIcon } from '@shared/ui';
 
 import {
   useInstitutionAdmins,
+  useInstitutionInvitations,
   useInstitutionMutations,
   type InstitutionInput,
 } from '../api/institutionApi';
 import { describeInstitutionError } from '../model/errors';
-import { validateInstitution, type Institution } from '../model/institution';
+import {
+  validateInstitution,
+  type Institution,
+  type InstitutionInvitation,
+} from '../model/institution';
+
+const invitationState: Record<
+  InstitutionInvitation['state'],
+  { label: string; className: string }
+> = {
+  ACTIVE: { label: 'Pendente', className: 'bg-amber-50 text-amber-900 border-amber-200' },
+  EXHAUSTED: { label: 'Aceito', className: 'bg-green-50 text-green-800 border-green-200' },
+  EXPIRED: { label: 'Expirado', className: 'bg-[#f8eeee] text-vince-muted border-vince-border' },
+  REVOKED: { label: 'Revogado', className: 'bg-[#f8eeee] text-vince-muted border-vince-border' },
+};
+
+const roleLabel: Record<string, string> = {
+  INSTITUTION_ADMIN: 'Administrador institucional',
+  COORDINATOR: 'Coordenador',
+  PROFESSOR: 'Professor',
+};
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(value),
+  );
+}
 
 type InstitutionDetailsDialogProps = {
   institution: Institution | null;
@@ -46,7 +73,9 @@ export function InstitutionDetailsDialog({
   const [form, setForm] = useState<InstitutionForm>(emptyForm);
   const [adminEmail, setAdminEmail] = useState('');
   const [invitationUrl, setInvitationUrl] = useState('');
+  const [validDays, setValidDays] = useState(7);
   const admins = useInstitutionAdmins(institution?.id ?? null).data ?? [];
+  const invitations = useInstitutionInvitations(institution?.id ?? null);
   const mutations = useInstitutionMutations();
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const loadedInstitutionId = useRef<string | null>(null);
@@ -103,6 +132,7 @@ export function InstitutionDetailsDialog({
       const result = await mutations.assignAdmin.mutateAsync({
         institutionId: currentInstitution.id,
         email: adminEmail,
+        validDays,
       });
       setAdminEmail('');
       if (result.kind === 'invited') {
@@ -112,6 +142,27 @@ export function InstitutionDetailsDialog({
         setInvitationUrl('');
         toast.success('Administrador designado.');
       }
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+    }
+  }
+
+  async function copyInvitation() {
+    try {
+      await navigator.clipboard.writeText(invitationUrl);
+      toast.success('Link copiado.');
+    } catch {
+      toast.error('Não foi possível copiar; selecione o link e copie manualmente.');
+    }
+  }
+
+  async function revokeInvitation(invitationId: string) {
+    try {
+      await mutations.revokeInvitation.mutateAsync({
+        institutionId: currentInstitution.id,
+        invitationId,
+      });
+      toast.success('Convite revogado.');
     } catch (error) {
       toast.error(describeInstitutionError(error));
     }
@@ -210,7 +261,6 @@ export function InstitutionDetailsDialog({
               <Field
                 label="Domínio"
                 onChange={(value) => updateForm('domain', value)}
-                required
                 value={form.domain}
               />
               <Field
@@ -276,7 +326,7 @@ export function InstitutionDetailsDialog({
             </div>
 
             <form
-              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]"
+              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px_auto]"
               onSubmit={(event) => void assignAdmin(event)}
             >
               <Field
@@ -286,18 +336,109 @@ export function InstitutionDetailsDialog({
                 type="email"
                 value={adminEmail}
               />
+              <label className="block min-w-0">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                  Validade do convite
+                </span>
+                <select
+                  className="h-11 w-full rounded-padrao border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => setValidDays(Number(event.target.value))}
+                  value={validDays}
+                >
+                  <option value={7}>7 dias</option>
+                  <option value={15}>15 dias</option>
+                  <option value={30}>30 dias</option>
+                </select>
+              </label>
               <Button className="self-end" disabled={mutations.assignAdmin.isPending} type="submit">
-                Designar
+                Designar ou convidar
               </Button>
             </form>
+            <p className="mt-2 text-sm text-vince-muted">
+              Quem já tem conta na instituição é designado na hora; os demais recebem um convite e
+              passam a administrar a instituição ao aceitá-lo.
+            </p>
             {invitationUrl && (
-              <p
-                className="mt-3 break-all rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900"
+              <div
+                className="mt-3 flex flex-col gap-3 rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900 sm:flex-row sm:items-center sm:justify-between"
                 role="status"
               >
-                Link do convite: <span className="font-semibold">{invitationUrl}</span>
-              </p>
+                <p className="break-all">
+                  Link do convite: <span className="font-semibold">{invitationUrl}</span>
+                </p>
+                <Button
+                  onClick={() => void copyInvitation()}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Copiar link
+                </Button>
+              </div>
             )}
+          </section>
+
+          <section className="mt-6 rounded-lg border border-vince-border p-5">
+            <h3 className="font-bold text-vince-text">Convites</h3>
+            <p className="mt-1 text-sm text-vince-muted">
+              Convites de ingresso emitidos para esta instituição. O link só é exibido na emissão;
+              um convite pendente pode ser revogado a qualquer momento.
+            </p>
+            <div className="mt-4 space-y-3">
+              {invitations.isPending && (
+                <p className="text-sm text-vince-muted" role="status">
+                  Carregando convites…
+                </p>
+              )}
+              {invitations.data?.length === 0 && (
+                <p className="rounded-lg border border-dashed border-vince-border p-4 text-sm text-vince-muted">
+                  Nenhum convite emitido.
+                </p>
+              )}
+              {(invitations.data ?? []).map((invitation) => {
+                const state =
+                  invitation.state === 'EXHAUSTED' && invitation.form === 'OPEN'
+                    ? { ...invitationState.EXHAUSTED, label: 'Esgotado' }
+                    : invitationState[invitation.state];
+                const label = invitation.targetEmail ?? 'Convite aberto';
+                return (
+                  <article
+                    className="flex flex-col gap-3 rounded-lg border border-[#ead9dd] bg-[#fffafa] p-4 sm:flex-row sm:items-center sm:justify-between"
+                    key={invitation.id}
+                  >
+                    <div className="min-w-0 break-words">
+                      <p className="font-semibold text-vince-text">{label}</p>
+                      <p className="text-sm text-vince-muted">
+                        {roleLabel[invitation.roleCode] ?? invitation.roleCode} · válido até{' '}
+                        {formatDate(invitation.expiresAt)}
+                        {invitation.form === 'OPEN' &&
+                          ` · ${invitation.useCount}${invitation.maxUses ? `/${invitation.maxUses}` : ''} usos`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${state.className}`}
+                      >
+                        {state.label}
+                      </span>
+                      {invitation.state === 'ACTIVE' && (
+                        <Button
+                          aria-label={`Revogar convite de ${label}`}
+                          disabled={mutations.revokeInvitation.isPending}
+                          onClick={() => void revokeInvitation(invitation.id)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                          Revogar
+                        </Button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </section>
 
           <section className="mt-6 rounded-lg border border-vince-border bg-[#fffafa] p-5">

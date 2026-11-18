@@ -25,6 +25,8 @@ export function describeInstitutionError(error: unknown): string {
     const names = fields.map((item) => fieldLabel[item.field] ?? item.field);
     return names.length > 0 ? `Revise: ${names.join(', ')}.` : 'Revise os dados informados.';
   }
+  if (code === 'EMAIL_ALREADY_REGISTERED')
+    return 'Este e-mail já pertence a uma conta de outra instituição; ela não pode ser convidada aqui.';
   if (code === 'PERMISSION_DENIED') return 'Você não tem permissão para esta operação.';
   if (code === 'INSTITUTION_INACTIVE') return 'A instituição está desativada.';
   if (code === 'RESOURCE_NOT_FOUND') return 'Registro não encontrado.';

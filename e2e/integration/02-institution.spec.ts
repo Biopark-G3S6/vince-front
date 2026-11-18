@@ -97,7 +97,7 @@ test('INS-001/002: cadastra, altera, designa e revoga administrador, desativa e 
   );
 
   await details.getByLabel('E-mail do administrador').fill(professor.email);
-  await details.getByRole('button', { name: 'Designar' }).click();
+  await details.getByRole('button', { name: 'Designar ou convidar' }).click();
   await expect(page.getByText('Administrador designado.')).toBeVisible();
   await expect(details.getByText('Helena Futura')).toBeVisible();
   await shot(page, 'ins-02-admin-designado');
@@ -133,4 +133,84 @@ test('INS-001/002: cadastra, altera, designa e revoga administrador, desativa e 
     .click();
   await expect(page.getByText('Instituição reativada.')).toBeVisible();
   await expect(row).toContainText('Ativo');
+});
+
+test('INS-002: convite de administrador pela tela — aceito vira vínculo, pendente é revogável', async ({
+  page,
+  browser,
+}) => {
+  const suffix = uniqueSuffix();
+  const admin = await ApiSession.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+  const institution = await admin.post<{ id: string; name: string }>('/institutions', {
+    name: `Convites ${suffix}`,
+    code: `CV${suffix}`.toUpperCase().slice(0, 20),
+  });
+
+  await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await page.goto('/admin/instituicoes');
+  await page.getByPlaceholder('Buscar por nome, sigla, domínio ou identificador...').fill(suffix);
+  await page.getByRole('button', { name: `Detalhes de ${institution.name}` }).click();
+  const details = page.getByRole('dialog', { name: institution.name });
+
+  // Instituição sem domínio continua editável (o domínio é opcional).
+  await details.getByLabel('Cidade').fill('Maringá');
+  await details.getByRole('button', { name: 'Salvar alterações' }).click();
+  await expect(page.getByText('Dados da instituição atualizados.')).toBeVisible();
+
+  // Convite com validade escolhida: o link aparece e o convite fica pendente.
+  const invitedEmail = `convidada.${suffix}@e2e.test`;
+  await details.getByLabel('E-mail do administrador').fill(invitedEmail);
+  await details.getByRole('combobox', { name: 'Validade do convite' }).selectOption('15');
+  await details.getByRole('button', { name: 'Designar ou convidar' }).click();
+  await expect(details.getByText('Link do convite:')).toBeVisible();
+  const link = (await details.getByText(/\/invitations\//).textContent()) ?? '';
+  const invitedCard = details.locator('article', { hasText: invitedEmail });
+  await expect(invitedCard).toContainText('Pendente');
+  await expect(invitedCard).toContainText('Administrador institucional');
+
+  // Um segundo convite, revogado pela tela: o link deixa de valer.
+  const revokedEmail = `revogada.${suffix}@e2e.test`;
+  await details.getByLabel('E-mail do administrador').fill(revokedEmail);
+  await details.getByRole('button', { name: 'Designar ou convidar' }).click();
+  await expect(details.getByText(/\/invitations\//)).not.toHaveText(link);
+  const revokedLink = (await details.getByText(/\/invitations\//).textContent()) ?? '';
+  await details.getByRole('button', { name: `Revogar convite de ${revokedEmail}` }).click();
+  await expect(page.getByText('Convite revogado.')).toBeVisible();
+  await expect(details.locator('article', { hasText: revokedEmail })).toContainText('Revogado');
+  await shot(page, 'ins-04-convites');
+
+  // E-mail que já pertence a outra conta.
+  await details.getByLabel('E-mail do administrador').fill(ADMIN_EMAIL);
+  await details.getByRole('button', { name: 'Designar ou convidar' }).click();
+  await expect(page.getByText(/já pertence a uma conta de outra instituição/)).toBeVisible();
+
+  // A convidada aceita em outra sessão.
+  const guest = await browser.newContext({ baseURL: 'http://localhost:5173' });
+  const guestPage = await guest.newPage();
+  await guestPage.goto(new URL(revokedLink.trim()).pathname);
+  await expect(guestPage.getByRole('alert')).toBeVisible();
+  await guestPage.goto(new URL(link.trim()).pathname);
+  await guestPage.getByLabel('Nome completo').fill('Carla Convidada');
+  await guestPage.getByLabel('Nova senha').fill(PASSWORD);
+  await guestPage.getByLabel('Confirmar senha').fill(PASSWORD);
+  await guestPage.getByRole('button', { name: 'Criar conta' }).click();
+  await expect(guestPage.getByRole('status')).toContainText('Conta criada');
+  await guest.close();
+
+  // Vira administradora vinculada: aparece na lista e o convite consta como aceito.
+  await page.reload();
+  await page.getByPlaceholder('Buscar por nome, sigla, domínio ou identificador...').fill(suffix);
+  await page.getByRole('button', { name: `Detalhes de ${institution.name}` }).click();
+  const reopened = page.getByRole('dialog', { name: institution.name });
+  await expect(reopened.getByText('Carla Convidada')).toBeVisible();
+  await expect(reopened.locator('article', { hasText: invitedEmail })).toContainText('Aceito');
+
+  // A revogação pela tela tem efeito: o vínculo e o papel caem (RF-INS-002 RN3).
+  await reopened.getByRole('button', { name: 'Revogar administrador Carla Convidada' }).click();
+  await expect(page.getByText('Vínculo do administrador revogado.')).toBeVisible();
+  await expect(reopened.getByText('Carla Convidada')).toHaveCount(0);
+  const carla = await ApiSession.login(invitedEmail, PASSWORD);
+  expect((await carla.get<{ roles: string[] }>('/identity')).roles).not.toContain(
+    'INSTITUTION_ADMIN',
+  );
 });
