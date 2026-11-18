@@ -2085,6 +2085,8 @@ export interface components {
       email?: string;
       active?: boolean;
       roleCodes?: string[];
+      /** Format: uuid */
+      institutionId?: string | null;
     };
     InstitutionDtoResponse: {
       /** Format: uuid */

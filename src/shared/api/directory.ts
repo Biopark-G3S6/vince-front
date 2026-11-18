@@ -9,6 +9,8 @@ export type DirectoryUser = {
   email?: string;
   active?: boolean;
   roleCodes?: string[];
+  /** Só na busca de quem designa. */
+  institutionId?: string | null;
 };
 
 /**

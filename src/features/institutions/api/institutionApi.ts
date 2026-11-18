@@ -79,25 +79,37 @@ export function useInstitutions() {
   });
 }
 
-/** Os administradores vinculados: as contas com o papel na instituição (user-directory). */
+const ADMINS_KEY = ['institutions', 'admins'] as const;
+const noAdmins: InstitutionAdmin[] = [];
+
+/**
+ * Os administradores institucionais de todas as instituições, numa consulta só
+ * (user-directory, `directory-institution-admins`), agrupados por instituição.
+ */
+async function fetchAdminsByInstitution() {
+  const users = await http.all<DirectoryUser>('/users', { role: 'INSTITUTION_ADMIN' });
+  const grouped = new Map<string, InstitutionAdmin[]>();
+  for (const user of users) {
+    if (!user.institutionId) continue;
+    const list = grouped.get(user.institutionId) ?? [];
+    list.push({
+      id: user.id,
+      name: user.name,
+      email: user.email ?? '',
+      initials: makeInitials(user.name),
+      tone: tones[list.length % tones.length] ?? 'primary',
+    });
+    grouped.set(user.institutionId, list);
+  }
+  return grouped;
+}
+
+/** Os administradores vinculados a uma instituição, lidos da consulta compartilhada. */
 export function useInstitutionAdmins(institutionId: string | null) {
   return useQuery({
-    queryKey: ['institutions', institutionId, 'admins'],
-    queryFn: async () => {
-      const page = await http.page<DirectoryUser>('/users', {
-        institutionId,
-        role: 'INSTITUTION_ADMIN',
-        pageSize: 100,
-      });
-      return page.items.map((user, index): InstitutionAdmin => ({
-        id: user.id,
-        name: user.name,
-        email: user.email ?? '',
-        initials: makeInitials(user.name),
-        tone: tones[index % tones.length] ?? 'primary',
-      }));
-    },
-    enabled: Boolean(institutionId),
+    queryKey: ADMINS_KEY,
+    queryFn: fetchAdminsByInstitution,
+    select: (grouped) => (institutionId ? grouped.get(institutionId) : undefined) ?? noAdmins,
   });
 }
 
@@ -148,14 +160,12 @@ export function useInstitutionMutations() {
         );
         return { kind: 'invited' as const, url: issued.url };
       },
-      onSuccess: (_result, { institutionId }) =>
-        client.invalidateQueries({ queryKey: ['institutions', institutionId, 'admins'] }),
+      onSuccess: () => client.invalidateQueries({ queryKey: ADMINS_KEY }),
     }),
     revokeAdmin: useMutation({
       mutationFn: ({ institutionId, userId }: { institutionId: string; userId: string }) =>
         http.delete(`/institutions/${institutionId}/admins/${userId}`),
-      onSuccess: (_result, { institutionId }) =>
-        client.invalidateQueries({ queryKey: ['institutions', institutionId, 'admins'] }),
+      onSuccess: () => client.invalidateQueries({ queryKey: ADMINS_KEY }),
     }),
   };
 }
