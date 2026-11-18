@@ -7,6 +7,7 @@ import { Button, CalendarIcon, ConfirmDialog, EmptyState, PlusIcon, UsersIcon } 
 
 import { useCohorts } from '../api/cohortApi';
 import { describeAcademicError, useCourses } from '../api/courseApi';
+import { useEventOwnership } from '../api/eventOwnership';
 import {
   useEventDetails,
   useEventMutations,
@@ -85,42 +86,17 @@ export function EventsPage() {
   const [editingMilestoneId, setEditingMilestoneId] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
 
-  /*
-   * Quem é dono de qual escopo — o mesmo critério do backend (`EventScope.owns`, ADR-0032):
-   * a propriedade desce a hierarquia. O administrador é dono de tudo na instituição; o
-   * coordenador, de tudo no seu curso; o professor designado, da sua turma.
-   */
-  const administers = user.roles.includes('institutionAdmin') && Boolean(user.institutionId);
-  const coordinatedCourses = courses.filter(
-    (course) => course.active && (administers || course.coordinatorId === user.id),
-  );
-  const coordinatedCourseIds = new Set(
-    courses.filter((course) => course.coordinatorId === user.id).map((course) => course.id),
-  );
-  const ownCohorts = cohorts.filter(
-    (cohort) =>
-      cohort.active &&
-      (coordinatedCourseIds.has(cohort.courseId) ||
-        (user.roles.includes('advisor') && !user.roles.includes('student'))),
-  );
-  const allowedScopes: EventScopeType[] = [
-    ...(ownCohorts.length > 0 ? (['COHORT'] as const) : []),
-    ...(coordinatedCourses.length > 0 ? (['COURSE'] as const) : []),
-    ...(administers ? (['INSTITUTION'] as const) : []),
-  ];
+  const {
+    ownCourses: coordinatedCourses,
+    ownCohorts,
+    allowedScopes,
+    ownsEvent,
+  } = useEventOwnership(user);
   const [chosenScope, setScopeType] = useState<EventScopeType | null>(null);
   const scopeType: EventScopeType =
     chosenScope && allowedScopes.includes(chosenScope)
       ? chosenScope
       : (allowedScopes.at(-1) ?? 'COHORT');
-
-  const ownsEvent = (event: EventDto) =>
-    event.ownerId === user.id ||
-    (administers && event.institutionId === user.institutionId) ||
-    (event.scopeType !== 'INSTITUTION' &&
-      event.courseId !== null &&
-      coordinatedCourseIds.has(event.courseId)) ||
-    (event.scopeType === 'COHORT' && ownCohorts.some((cohort) => cohort.id === event.scopeId));
 
   const visibleEvents = events.filter(
     (event) =>

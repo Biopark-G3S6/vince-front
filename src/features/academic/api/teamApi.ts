@@ -8,6 +8,8 @@ export type TeamDto = {
   institutionId: string;
   identification: string;
   responsibleAdvisorId: string | null;
+  /** Integrantes ativos (`team-vacancies`): as vagas são o tamanho máximo menos este. */
+  activeMemberCount: number;
 };
 
 export type MemberRole = 'LEADER' | 'AUTHOR' | 'COAUTHOR';

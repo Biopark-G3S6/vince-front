@@ -103,12 +103,10 @@ test('EQP-002: aluno ingressa por conta própria e respeita o limite', async ({ 
   await login(page, diana.email, PASSWORD);
   await page.goto('/admin/equipes');
 
-  // A Equipe Alfa já tem dois integrantes: lotada.
-  await page
-    .locator('article', { hasText: 'Equipe Alfa' })
-    .getByRole('button', { name: 'Ingressar' })
-    .click();
-  await expect(page.getByText('A equipe atingiu o tamanho máximo.')).toBeVisible();
+  // A Equipe Alfa já tem dois integrantes: lotada, sem a opção de ingressar.
+  const alfa = page.locator('article', { hasText: 'Equipe Alfa' });
+  await expect(alfa).toContainText('2/2 integrantes · sem vagas');
+  await expect(alfa.getByRole('button', { name: 'Ingressar' })).toHaveCount(0);
 
   await page
     .locator('article', { hasText: 'Equipe Beta' })
@@ -140,4 +138,59 @@ test('EQP-005: o dono do escopo revoga o responsável', async ({ page }) => {
   await expect(page.locator('article', { hasText: 'Equipe Alfa' })).toContainText(
     'Orientador responsável: não definido',
   );
+});
+
+test('EQP: evento pelo endereço, vagas, ingresso só com vaga e convite de outro evento', async ({
+  page,
+}) => {
+  const owner = await ApiSession.login(scenario.professor.email, PASSWORD);
+  const other = await owner.post<{ id: string; title: string }>('/events', {
+    scopeType: 'COHORT',
+    scopeId: scenario.cohort.id,
+    title: `Feira ${scenario.suffix}`,
+    theme: 'Tema',
+    researchProblem: 'Problema',
+    objectives: 'Objetivos',
+    maxTeams: 2,
+    maxTeamSize: 1,
+  });
+
+  // A dona do evento ainda não orienta: não cria equipe.
+  await login(page, scenario.professor.email, PASSWORD);
+  await page.goto(`/admin/equipes?evento=${other.id}`);
+  await expect(page.getByRole('combobox', { name: 'Evento' })).toHaveValue(other.id);
+  await expect(page.getByRole('button', { name: 'Criar equipe' })).toHaveCount(0);
+
+  await owner.post(`/events/${other.id}/advisors/${scenario.professor.id}`);
+  const solo = await owner.post<{ id: string }>(`/events/${other.id}/teams`, {
+    identification: 'Equipe Solo',
+  });
+  await owner.post(`/events/${other.id}/teams`, { identification: 'Equipe Dupla' });
+  const [first, second] = scenario.students;
+  await owner.post(`/teams/${solo.id}/members/${first!.id}`);
+  await owner.post(`/teams/${solo.id}/invitations`, {
+    userId: second!.id,
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+
+  // O aluno vê as vagas e só pode ingressar onde há vaga.
+  await login(page, second!.email, PASSWORD);
+  await page.goto(`/admin/equipes?evento=${other.id}`);
+  const soloCard = page.locator('article', { hasText: 'Equipe Solo' });
+  const duplaCard = page.locator('article', { hasText: 'Equipe Dupla' });
+  await expect(soloCard).toContainText('1/1 integrantes · sem vagas');
+  await expect(duplaCard).toContainText('0/1 integrantes · 1 vaga');
+  await expect(soloCard.getByRole('button', { name: 'Ingressar' })).toHaveCount(0);
+
+  // O convite recebido diz a equipe e o evento.
+  await expect(
+    page.getByText(`Convite para a equipe Equipe Solo do evento ${other.title}`),
+  ).toBeVisible();
+
+  await duplaCard.getByRole('button', { name: 'Ingressar' }).click();
+  await expect(page.getByText('Você entrou na equipe.')).toBeVisible();
+  await expect(duplaCard).toContainText('1/1 integrantes · sem vagas');
+  // Já tem equipe no evento: nenhum "Ingressar".
+  await expect(page.getByRole('button', { name: 'Ingressar' })).toHaveCount(0);
+  await shot(page, 'eqp-05-vagas');
 });

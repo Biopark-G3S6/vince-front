@@ -1,12 +1,16 @@
 import { useMemo, useState, type FormEvent } from 'react';
+
+import { useQueries } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { hasPermission, useCurrentUser } from '@features/admin';
 import { useUserNames } from '@shared/api/directory';
+import { http } from '@shared/api/http';
 import { Button, EmptyState, PlusIcon, UserIcon, UsersIcon } from '@shared/ui';
 
 import { describeAcademicError } from '../api/courseApi';
 import { useEventDetails, useEvents } from '../api/eventApi';
+import { useEventOwnership } from '../api/eventOwnership';
 import {
   useEligibleStudents,
   useEventArticles,
@@ -56,13 +60,20 @@ export function TeamsPage() {
     () => (eventsQuery.data ?? []).filter((event) => event.status === 'ACTIVE'),
     [eventsQuery.data],
   );
-  const [eventId, setEventId] = useState('');
+  // O atalho "Ver equipes do evento" chega com `?evento=<id>`.
+  const [eventId, setEventId] = useState(
+    () => new URLSearchParams(window.location.search).get('evento') ?? '',
+  );
+  const { ownsEvent } = useEventOwnership(user);
   const selectedEvent = events.find((event) => event.id === eventId) ?? events[0];
   const teamsQuery = useTeams(selectedEvent?.id);
   const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data]);
   const articles = useEventArticles(selectedEvent?.id).data ?? [];
   const eventDetails = useEventDetails(selectedEvent?.id);
   const eventAdvisorIds = (eventDetails.advisors.data ?? []).map((item) => item.userId);
+  // Criar equipe, designar, convidar e remover são do orientador do evento (RF-EQP-001, 003, 004).
+  const advises = eventAdvisorIds.includes(user.id);
+  const owns = selectedEvent ? ownsEvent(selectedEvent) : false;
   const mutations = useTeamMutations();
   const received = useReceivedInvitations(can('TEAM:JOIN'));
 
@@ -71,9 +82,9 @@ export function TeamsPage() {
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0];
   const members = useMembers(selectedTeam?.id);
   const activeMembers = (members.data ?? []).filter((member) => member.status === 'ACTIVE');
-  const invitations = useTeamInvitations(selectedTeam?.id, can('TEAM:INVITE_MEMBER'));
+  const invitations = useTeamInvitations(selectedTeam?.id, can('TEAM:INVITE_MEMBER') && advises);
   const pendingInvitations = (invitations.data ?? []).filter((item) => item.status === 'PENDING');
-  const eligible = useEligibleStudents(selectedEvent?.id, can('TEAM:ASSIGN_MEMBER'));
+  const eligible = useEligibleStudents(selectedEvent?.id, can('TEAM:ASSIGN_MEMBER') && advises);
   const teamFull = Boolean(selectedEvent && activeMembers.length >= selectedEvent.maxTeamSize);
 
   const names = useUserNames([
@@ -85,7 +96,21 @@ export function TeamsPage() {
   ]);
 
   const articleOf = (team: TeamDto) => articles.find((article) => article.teamId === team.id);
+  const membersOf = (team: TeamDto) => team.activeMemberCount;
+  const hasTeamInEvent = articles.some((article) => article.memberIds.includes(user.id));
   const receivedItems = received.data ?? [];
+  // O convite recebido pode ser de outro evento: nome da equipe e do evento, por identificador.
+  const receivedTeams = useQueries({
+    queries: receivedItems.map((invitation) => ({
+      queryKey: ['team', invitation.teamId],
+      queryFn: () => http.get<TeamDto>(`/teams/${invitation.teamId}`),
+    })),
+  });
+  const teamNameOf = (teamId: string) =>
+    receivedTeams.find((query) => query.data?.id === teamId)?.data?.identification ??
+    teams.find((team) => team.id === teamId)?.identification;
+  const eventTitleOf = (id: string) =>
+    (eventsQuery.data ?? []).find((event) => event.id === id)?.title;
 
   async function run(task: () => Promise<unknown>, success: string) {
     try {
@@ -118,7 +143,7 @@ export function TeamsPage() {
   return (
     <PageScaffold
       actions={
-        can('TEAM:CREATE') ? (
+        can('TEAM:CREATE') && advises ? (
           <Button
             className="rounded-padrao px-7"
             disabled={!selectedEvent}
@@ -155,11 +180,10 @@ export function TeamsPage() {
                 key={invitation.id}
               >
                 <span className="text-vince-text">
-                  Convite para a equipe{' '}
-                  <strong>
-                    {teams.find((team) => team.id === invitation.teamId)?.identification ??
-                      'de um evento seu'}
-                  </strong>{' '}
+                  Convite para a equipe <strong>{teamNameOf(invitation.teamId) ?? '…'}</strong>
+                  {eventTitleOf(invitation.eventId) && (
+                    <> do evento {eventTitleOf(invitation.eventId)}</>
+                  )}{' '}
                   · válido até{' '}
                   {new Intl.DateTimeFormat('pt-BR').format(new Date(invitation.expiresAt))}
                 </span>
@@ -251,6 +275,16 @@ export function TeamsPage() {
                       {team.identification}
                     </h3>
                     <p className="mt-1 text-vince-muted">{article?.title ?? 'Artigo sem título'}</p>
+                    {selectedEvent && (
+                      <p className="mt-2 text-sm font-semibold text-vince-text">
+                        {membersOf(team)}/{selectedEvent.maxTeamSize} integrantes ·{' '}
+                        {Math.max(selectedEvent.maxTeamSize - membersOf(team), 0) === 0
+                          ? 'sem vagas'
+                          : `${selectedEvent.maxTeamSize - membersOf(team)} ${
+                              selectedEvent.maxTeamSize - membersOf(team) === 1 ? 'vaga' : 'vagas'
+                            }`}
+                      </p>
+                    )}
                     <p className="mt-2 text-sm text-vince-muted">
                       Orientador responsável:{' '}
                       {team.responsibleAdvisorId
@@ -259,19 +293,22 @@ export function TeamsPage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {can('TEAM:JOIN') && !article?.memberIds.includes(user.id) && (
-                      <Button
-                        onClick={() =>
-                          void run(
-                            () => mutations.join.mutateAsync(team.id),
-                            'Você entrou na equipe.',
-                          )
-                        }
-                        variant="outline"
-                      >
-                        Ingressar
-                      </Button>
-                    )}
+                    {can('TEAM:JOIN') &&
+                      !hasTeamInEvent &&
+                      selectedEvent &&
+                      membersOf(team) < selectedEvent.maxTeamSize && (
+                        <Button
+                          onClick={() =>
+                            void run(
+                              () => mutations.join.mutateAsync(team.id),
+                              'Você entrou na equipe.',
+                            )
+                          }
+                          variant="outline"
+                        >
+                          Ingressar
+                        </Button>
+                      )}
                     <Button
                       aria-label={`Gerenciar ${team.identification}`}
                       aria-pressed={team.id === selectedTeam?.id}
@@ -312,7 +349,7 @@ export function TeamsPage() {
                         {names.nameOf(member.userId)}{' '}
                         <span className="text-sm text-vince-muted">· {roleLabel[member.role]}</span>
                       </span>
-                      {can('TEAM:ASSIGN_MEMBER') && (
+                      {can('TEAM:ASSIGN_MEMBER') && advises && (
                         <span className="flex items-center gap-2">
                           <select
                             aria-label={`Papel de ${names.nameOf(member.userId)}`}
@@ -439,7 +476,7 @@ export function TeamsPage() {
                 </div>
               )}
 
-              {can('TEAM:ASSIGN_ADVISOR') && (
+              {can('TEAM:ASSIGN_ADVISOR') && owns && (
                 <div>
                   <h3 className="mb-3 font-extrabold text-vince-text">Orientador responsável</h3>
                   <form
