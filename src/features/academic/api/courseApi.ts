@@ -60,6 +60,8 @@ const errorText: Record<string, string> = {
   RESOURCE_NOT_FOUND: 'Curso ou usuário não encontrado.',
   INSTITUTION_INACTIVE: 'A instituição está desativada.',
   COURSE_INACTIVE: 'O curso está desativado.',
+  COORDINATOR_ALREADY_ASSIGNED:
+    'O curso já tem coordenador. Revogue a coordenação atual antes de designar outro.',
   VALIDATION_FAILED: 'Revise os dados informados.',
   COHORT_ALREADY_EXISTS: 'Já existe turma com esta identificação neste curso.',
   STUDENT_ALREADY_ENROLLED: 'Este aluno já está matriculado na turma.',
@@ -75,6 +77,16 @@ const errorText: Record<string, string> = {
   INVITATION_REVOKED: 'O convite não é mais válido.',
 };
 
+const fieldLabel: Record<string, string> = {
+  name: 'nome',
+  identification: 'código',
+  term: 'período',
+};
+
+/** Limites do contrato de curso (`course.ts` no backend). */
+export const COURSE_NAME_MAX = 200;
+export const COURSE_CODE_MAX = 100;
+
 export function describeAcademicError(error: unknown, fallback = 'Não foi possível concluir.') {
   const code =
     error && typeof error === 'object' && 'code' in error
@@ -89,6 +101,10 @@ export function describeAcademicError(error: unknown, fallback = 'Não foi poss�
     fields.some((field) => field.code === 'ALREADY_USED' || field.code === 'DUPLICATE')
   ) {
     return 'Já existe um registro com esta identificação.';
+  }
+  const tooLong = fields.find((field) => field.code === 'TOO_LONG');
+  if (code === 'VALIDATION_FAILED' && tooLong) {
+    return `O campo ${fieldLabel[tooLong.field] ?? tooLong.field} excede o tamanho máximo.`;
   }
   return errorText[code] ?? fallback;
 }

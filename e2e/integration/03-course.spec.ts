@@ -22,6 +22,9 @@ test('CUR-001/002: cria, edita, designa e revoga coordenador e desativa', async 
 
   await page.getByRole('button', { name: 'Novo curso' }).click();
   const create = page.getByRole('dialog', { name: 'Novo curso' });
+  // O nome respeita o limite do contrato (200 caracteres).
+  await create.getByLabel('Nome do curso').fill('N'.repeat(250));
+  await expect(create.getByLabel('Nome do curso')).toHaveValue('N'.repeat(200));
   await create.getByLabel('Nome do curso').fill(`Engenharia ${scenario.suffix}`);
   await create.getByLabel('Código').fill(code);
   await create.getByRole('button', { name: 'Criar curso' }).click();
@@ -37,9 +40,17 @@ test('CUR-001/002: cria, edita, designa e revoga coordenador e desativa', async 
   await expect(page.getByText('Curso atualizado.')).toBeVisible();
   const row = page.locator('article', { hasText: `Engenharia de Software ${scenario.suffix}` });
   await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute('data-selected', 'true');
+  await expect(row).toHaveClass(/bg-vince-tertiary/);
+
+  // A busca do seletor consulta o diretório.
+  await page.getByLabel('Buscar professor').fill('Otávio');
+  await expect(page.getByLabel('Coordenador ativo').locator('option')).toHaveCount(2);
 
   // Designação do coordenador (RF-CUR-002).
-  await page.getByLabel('Coordenador ativo').selectOption({ label: scenario.otherProfessor.name });
+  await page.getByLabel('Coordenador ativo').selectOption({
+    label: `${scenario.otherProfessor.name} (${scenario.otherProfessor.email})`,
+  });
   await page.getByRole('button', { name: 'Salvar designação' }).click();
   await expect(page.getByText('Coordenação atualizada.')).toBeVisible();
   await expect(row).toContainText(scenario.otherProfessor.name);
@@ -48,6 +59,11 @@ test('CUR-001/002: cria, edita, designa e revoga coordenador e desativa', async 
   await expect(row).toContainText(scenario.otherProfessor.name);
   await shot(page, 'cur-01-coordenador');
 
+  // Com o cargo ocupado, a troca exige revogar antes (RF-CUR-002 E1).
+  await expect(page.getByLabel('Coordenador ativo')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Salvar designação' })).toBeDisabled();
+  await expect(page.getByText(/revogue a coordenação atual e então/)).toBeVisible();
+
   // O designado passa a ter o papel de coordenador.
   const otavio = await ApiSession.login(scenario.otherProfessor.email, PASSWORD);
   expect((await otavio.get<{ roles: string[] }>('/identity')).roles).toContain('COORDINATOR');
@@ -55,10 +71,16 @@ test('CUR-001/002: cria, edita, designa e revoga coordenador e desativa', async 
   await page.getByRole('button', { name: 'Revogar coordenação' }).click();
   await expect(page.getByText('Coordenação revogada.')).toBeVisible();
   await expect(row).toContainText('Coordenador não definido');
+  await expect(page.getByLabel('Coordenador ativo')).toBeEnabled();
 
   await page.getByRole('button', { name: 'Desativar curso' }).click();
   await expect(page.getByText('Curso desativado.')).toBeVisible();
   await expect(row).toContainText('Inativo');
+
+  // Curso desativado não oferece nova coordenação (RF-CUR-001 RN2).
+  await expect(page.getByText('Curso desativado: não admite nova coordenação')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Salvar designação' })).toHaveCount(0);
+  await expect(page.getByLabel('Coordenador ativo')).toHaveCount(0);
 });
 
 test('CUR: o coordenador vê o curso, mas não cria nem designa', async ({ page }) => {

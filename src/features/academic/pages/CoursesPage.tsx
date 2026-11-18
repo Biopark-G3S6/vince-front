@@ -1,6 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
+import { cn } from '@shared/lib/cn';
+
 import { hasPermission, useCurrentUser } from '@features/admin';
 import { useUserNames, useUserSearch } from '@shared/api/directory';
 import {
@@ -15,6 +17,8 @@ import {
 } from '@shared/ui';
 
 import {
+  COURSE_CODE_MAX,
+  COURSE_NAME_MAX,
   describeAcademicError,
   useCourseMutations,
   useCourses,
@@ -46,7 +50,11 @@ export function CoursesPage() {
   const names = useUserNames(courses.map((course) => course.coordinatorId));
   const canCreate = hasPermission(user, 'COURSE:CREATE');
   const canAssign = hasPermission(user, 'COURSE:ASSIGN_COORDINATOR');
-  const professors = useUserSearch({ role: 'PROFESSOR' }, canAssign);
+  const [coordinatorSearch, setCoordinatorSearch] = useState('');
+  const professors = useUserSearch(
+    { role: 'PROFESSOR', search: coordinatorSearch.trim() || undefined },
+    canAssign,
+  );
 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -146,8 +154,8 @@ export function CoursesPage() {
         submitLabel="Criar curso"
         title="Novo curso"
       >
-        <AcademicField label="Nome do curso" name="name" required />
-        <AcademicField label="Código" name="code" required />
+        <AcademicField label="Nome do curso" maxLength={COURSE_NAME_MAX} name="name" required />
+        <AcademicField label="Código" maxLength={COURSE_CODE_MAX} name="code" required />
       </AcademicActionDialog>
       {selectedCourse && (
         <AcademicActionDialog
@@ -161,12 +169,14 @@ export function CoursesPage() {
           <AcademicField
             defaultValue={selectedCourse.name}
             label="Nome do curso"
+            maxLength={COURSE_NAME_MAX}
             name="name"
             required
           />
           <AcademicField
             defaultValue={selectedCourse.identification}
             label="Código"
+            maxLength={COURSE_CODE_MAX}
             name="code"
             required
           />
@@ -279,29 +289,68 @@ export function CoursesPage() {
                 </p>
               </div>
 
-              {canAssign && (
-                <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-vince-muted">
-                    Coordenador ativo
-                  </span>
-                  <select
-                    className="h-12 w-full rounded-lg border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary"
-                    defaultValue={selectedCourse.coordinatorId ?? ''}
-                    name="coordinator"
-                    required
-                  >
-                    <option value="">Selecione um coordenador</option>
-                    {(professors.data?.items ?? []).map((professor) => (
-                      <option key={professor.id} value={professor.id}>
-                        {professor.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {!selectedCourse.active && (
+                <p
+                  className="rounded-lg border border-vince-border bg-[#f8eeee] p-4 text-sm text-vince-muted"
+                  role="note"
+                >
+                  Curso desativado: não admite nova coordenação nem novas turmas.
+                </p>
+              )}
+
+              {canAssign && selectedCourse.active && (
+                <>
+                  {!selectedCourse.coordinatorId && (
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                        Buscar professor
+                      </span>
+                      <input
+                        className="h-12 w-full rounded-lg border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary"
+                        onChange={(event) => setCoordinatorSearch(event.target.value)}
+                        placeholder="Nome ou e-mail"
+                        type="search"
+                        value={coordinatorSearch}
+                      />
+                    </label>
+                  )}
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                      Coordenador ativo
+                    </span>
+                    <select
+                      className="h-12 w-full rounded-lg border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary disabled:bg-[#f7f1f2]"
+                      defaultValue={selectedCourse.coordinatorId ?? ''}
+                      disabled={Boolean(selectedCourse.coordinatorId)}
+                      name="coordinator"
+                      required
+                    >
+                      <option value="">Selecione um coordenador</option>
+                      {selectedCourse.coordinatorId &&
+                        !(professors.data?.items ?? []).some(
+                          (professor) => professor.id === selectedCourse.coordinatorId,
+                        ) && (
+                          <option value={selectedCourse.coordinatorId}>
+                            {names.nameOf(selectedCourse.coordinatorId)}
+                          </option>
+                        )}
+                      {(professors.data?.items ?? []).map((professor) => (
+                        <option key={professor.id} value={professor.id}>
+                          {professor.name}
+                          {professor.email ? ` (${professor.email})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
               )}
 
               <div className="grid gap-3">
-                {canAssign && <Button type="submit">Salvar designação</Button>}
+                {canAssign && selectedCourse.active && (
+                  <Button disabled={Boolean(selectedCourse.coordinatorId)} type="submit">
+                    Salvar designação
+                  </Button>
+                )}
                 {canAssign && (
                   <Button
                     disabled={!selectedCourse.coordinatorId}
@@ -345,7 +394,8 @@ export function CoursesPage() {
               <div className="rounded-lg border border-vince-border p-4 text-sm leading-6 text-vince-muted">
                 <p className="font-bold text-vince-text">Regra aplicada</p>
                 <p className="mt-2">
-                  No máximo um coordenador ativo por curso; a designação substitui a anterior.
+                  Um coordenador ativo por curso. Para trocar, revogue a coordenação atual e então
+                  designe o novo coordenador.
                 </p>
               </div>
             </form>
@@ -376,7 +426,10 @@ function CourseRow({
 
   return (
     <article
-      className="grid min-w-[760px] grid-cols-[1.7fr_0.7fr_1.4fr_0.3fr] items-center border-b border-vince-border px-6 py-5 last:border-b-0"
+      className={cn(
+        'grid min-w-[760px] grid-cols-[1.7fr_0.7fr_1.4fr_0.3fr] items-center border-b border-vince-border px-6 py-5 last:border-b-0',
+        selected && 'bg-vince-tertiary shadow-[inset_4px_0_0_var(--color-vince-primary,#6b1e2e)]',
+      )}
       data-selected={selected || undefined}
     >
       <div>
