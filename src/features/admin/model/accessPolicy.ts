@@ -60,7 +60,7 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
   institutionAdmin: [
     'dashboard',
     'courses',
-    'classes',
+    'people',
     'events',
     'teams',
     'articles',

@@ -5,6 +5,7 @@ import { hasPermission, useCurrentUser } from '@features/admin';
 import { useUserNames, useUserSearch } from '@shared/api/directory';
 import {
   Button,
+  ConfirmDialog,
   BuildingIcon,
   CalendarIcon,
   EmptyState,
@@ -49,14 +50,17 @@ const formatDate = (iso: string) =>
 /** A validade do convite é um instante: mostrada no fuso de quem vê. */
 const formatInstant = (iso: string) => new Intl.DateTimeFormat('pt-BR').format(new Date(iso));
 
-type Action = 'create' | 'professor' | 'student' | 'invite' | null;
+type Action = 'create' | 'edit' | 'professor' | 'student' | 'invite' | null;
+
+/** A parte de data (AAAA-MM-DD) de um instante gravado à meia-noite UTC. */
+const dateInput = (iso: string) => iso.slice(0, 10);
 
 /** RF-TUR-001 a RF-TUR-004 (o ingresso por convite, RF-TUR-005, é a tela de aceite). */
 export function ClassesPage() {
   const user = useCurrentUser();
   const coursesQuery = useCourses();
   const courses = useMemo(() => coursesQuery.data ?? [], [coursesQuery.data]);
-  const { cohorts, isPending } = useCohorts(courses);
+  const { cohorts, isPending } = useCohorts();
   const mutations = useCohortMutations();
   const can = (permission: string) => hasPermission(user, permission);
 
@@ -65,6 +69,8 @@ export function ClassesPage() {
   const [status, setStatus] = useState<'all' | CohortStatus>('all');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [lastInvitationUrl, setLastInvitationUrl] = useState('');
+  const [professorSearch, setProfessorSearch] = useState('');
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const courseNames = useMemo(
     () => new Map(courses.map((course) => [course.id, course.name])),
@@ -91,9 +97,18 @@ export function ClassesPage() {
   const enrollments = details.enrollments.data ?? [];
   const names = useUserNames([...professorIds, ...enrollments.map((item) => item.userId)]);
   const professorCandidates = useUserSearch(
-    { role: 'PROFESSOR' },
+    { role: 'PROFESSOR', search: professorSearch.trim() || undefined },
     can('COHORT:ASSIGN_PROFESSOR') && action === 'professor',
   );
+
+  async function copyInvitation() {
+    try {
+      await navigator.clipboard.writeText(lastInvitationUrl);
+      toast.success('Link copiado.');
+    } catch {
+      toast.error('Não foi possível copiar; selecione o link e copie manualmente.');
+    }
+  }
 
   async function run(task: () => Promise<unknown>, success: string) {
     try {
@@ -133,6 +148,26 @@ export function ClassesPage() {
         setSearch('');
         setStatus('all');
       }, 'Turma criada.');
+    } else if (selectedClass && action === 'edit') {
+      if (!text('name') || !text('term')) {
+        toast.error('Preencha o nome e o período da turma.');
+        return;
+      }
+      if (text('endDate') < text('startDate')) {
+        toast.error('A data final deve ser igual ou posterior à data inicial.');
+        return;
+      }
+      done = await run(
+        () =>
+          mutations.update.mutateAsync({
+            id: selectedClass.id,
+            identification: text('name'),
+            term: text('term'),
+            startsAt: `${text('startDate')}T00:00:00.000Z`,
+            endsAt: `${text('endDate')}T00:00:00.000Z`,
+          }),
+        'Turma atualizada.',
+      );
     } else if (selectedClass && action === 'professor') {
       done = await run(
         () =>
@@ -215,11 +250,13 @@ export function ClassesPage() {
         title={
           action === 'create'
             ? 'Nova turma'
-            : action === 'professor'
-              ? 'Designar professor'
-              : action === 'student'
-                ? 'Cadastrar aluno'
-                : 'Emitir convite multiuso'
+            : action === 'edit'
+              ? 'Editar turma'
+              : action === 'professor'
+                ? 'Designar professor'
+                : action === 'student'
+                  ? 'Cadastrar aluno'
+                  : 'Emitir convite multiuso'
         }
       >
         {action === 'create' ? (
@@ -243,20 +280,75 @@ export function ClassesPage() {
               <AcademicField label="Data final" name="endDate" required type="date" />
             </div>
           </>
+        ) : action === 'edit' && selectedClass ? (
+          <>
+            <AcademicField
+              defaultValue={selectedClass.identification}
+              label="Nome da turma"
+              name="name"
+              required
+            />
+            <AcademicField
+              defaultValue={selectedClass.term}
+              label="Período letivo"
+              name="term"
+              required
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AcademicField
+                defaultValue={dateInput(selectedClass.startsAt)}
+                label="Data inicial"
+                name="startDate"
+                required
+                type="date"
+              />
+              <AcademicField
+                defaultValue={dateInput(selectedClass.endsAt)}
+                label="Data final"
+                name="endDate"
+                required
+                type="date"
+              />
+            </div>
+          </>
         ) : action === 'invite' ? (
           <AcademicField label="Validade do convite" name="expiresAt" required type="date" />
         ) : action === 'professor' ? (
-          <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-vince-muted">Professor</span>
-            <select className={academicFieldClass} name="professor" required>
-              <option value="">Selecione</option>
-              {(professorCandidates.data?.items ?? []).map((professor) => (
-                <option key={professor.id} value={professor.id}>
-                  {professor.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <>
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                Buscar professor
+              </span>
+              <input
+                className={academicFieldClass}
+                onChange={(event) => setProfessorSearch(event.target.value)}
+                placeholder="Nome ou e-mail"
+                type="search"
+                value={professorSearch}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-vince-muted">Professor</span>
+              <select className={academicFieldClass} name="professor" required>
+                <option value="">Selecione</option>
+                {(professorCandidates.data?.items ?? []).map((professor) => (
+                  <option key={professor.id} value={professor.id}>
+                    {professor.name}
+                    {professor.email ? ` (${professor.email})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {can('INVITATION:CREATE') && (
+              <p className="text-sm text-vince-muted">
+                O professor ainda não tem conta?{' '}
+                <a className="font-semibold text-vince-primary underline" href="/admin/pessoas">
+                  Convide-o em Professores e alunos
+                </a>
+                .
+              </p>
+            )}
+          </>
         ) : (
           <>
             <AcademicField label="Nome do aluno" name="name" required />
@@ -370,28 +462,35 @@ export function ClassesPage() {
                     Emitir convite multiuso
                   </Button>
                 )}
+                {can('COHORT:UPDATE') && selectedClass.active && (
+                  <Button onClick={() => setAction('edit')} variant="outline">
+                    Editar turma
+                  </Button>
+                )}
                 {can('COHORT:DEACTIVATE') && selectedClass.active && (
-                  <Button
-                    onClick={() =>
-                      void run(
-                        () => mutations.deactivate.mutateAsync(selectedClass),
-                        'Turma encerrada.',
-                      )
-                    }
-                    variant="outline"
-                  >
+                  <Button onClick={() => setConfirmClose(true)} variant="outline">
                     Encerrar turma
                   </Button>
                 )}
               </div>
 
               {lastInvitationUrl && (
-                <p
-                  className="break-all rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900"
+                <div
+                  className="flex flex-col gap-3 rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900"
                   role="status"
                 >
-                  Link do convite: <span className="font-semibold">{lastInvitationUrl}</span>
-                </p>
+                  <p className="break-all">
+                    Link do convite: <span className="font-semibold">{lastInvitationUrl}</span>
+                  </p>
+                  <Button
+                    onClick={() => void copyInvitation()}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Copiar link
+                  </Button>
+                </div>
               )}
 
               <ListBox title="Professores">
@@ -450,7 +549,10 @@ export function ClassesPage() {
                       <div className="px-4 py-3" key={invitation.invitationId}>
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <span className="break-all font-bold text-vince-primary">
-                            Convite {invitation.invitationId.slice(-6).toUpperCase()}
+                            Convite multiuso ·{' '}
+                            {invitation.expiresAt
+                              ? `válido até ${formatInstant(invitation.expiresAt)}`
+                              : 'sem validade'}
                           </span>
                           <StatusBadge
                             label={
@@ -464,9 +566,9 @@ export function ClassesPage() {
                           />
                         </div>
                         <p className="mt-1 text-sm text-vince-muted">
-                          Validade:{' '}
-                          {invitation.expiresAt ? formatInstant(invitation.expiresAt) : '—'} · Usos:{' '}
-                          {invitation.useCount ?? 0}
+                          {invitation.useCount ?? 0}{' '}
+                          {(invitation.useCount ?? 0) === 1 ? 'ingresso' : 'ingressos'} · código{' '}
+                          {invitation.invitationId.slice(-6).toUpperCase()}
                         </p>
                         {active && can('INVITATION:REVOKE') && (
                           <button
@@ -506,6 +608,20 @@ export function ClassesPage() {
           )}
         </SectionPanel>
       </section>
+      <ConfirmDialog
+        cancelLabel="Cancelar"
+        confirmLabel="Encerrar turma"
+        description="A turma encerrada não admite novos professores, alunos nem convites. A ação não pode ser desfeita."
+        onConfirm={() => {
+          setConfirmClose(false);
+          if (selectedClass) {
+            void run(() => mutations.deactivate.mutateAsync(selectedClass), 'Turma encerrada.');
+          }
+        }}
+        onOpenChange={setConfirmClose}
+        open={confirmClose}
+        title="Encerrar turma?"
+      />
     </PageScaffold>
   );
 }

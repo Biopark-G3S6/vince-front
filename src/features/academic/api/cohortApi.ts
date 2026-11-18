@@ -1,8 +1,6 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { http } from '@shared/api/http';
-
-import type { CourseDto } from './courseApi';
 
 /** A turma como a API a entrega (`CohortResponse`). */
 export type CohortDto = {
@@ -34,18 +32,16 @@ export function statusOfCohort(cohort: CohortDto, now = new Date()): CohortStatu
   return new Date(cohort.startsAt) > now ? 'planned' : 'active';
 }
 
-/** As turmas de todos os cursos visíveis ao ator (uma listagem por curso). */
-export function useCohorts(courses: CourseDto[]) {
-  const results = useQueries({
-    queries: courses.map((course) => ({
-      queryKey: ['cohorts', course.id],
-      queryFn: () => http.all<CohortDto>(`/courses/${course.id}/cohorts`),
-    })),
+const COHORTS_KEY = ['cohorts'] as const;
+
+/** As turmas que o ator lê, numa consulta só (`GET /cohorts`, cohort-listing). */
+export function useCohorts(enabled = true) {
+  const query = useQuery({
+    queryKey: COHORTS_KEY,
+    queryFn: () => http.all<CohortDto>('/cohorts'),
+    enabled,
   });
-  return {
-    cohorts: results.flatMap((result) => result.data ?? []),
-    isPending: results.some((result) => result.isPending),
-  };
+  return { cohorts: query.data ?? [], isPending: query.isPending };
 }
 
 export function useCohortDetails(cohortId: string | undefined, permissions: string[]) {
@@ -89,12 +85,25 @@ export function useCohortMutations() {
         startsAt: string;
         endsAt: string;
       }) => http.post<CohortDto>(`/courses/${courseId}/cohorts`, body),
-      onSuccess: (cohort) => client.invalidateQueries({ queryKey: ['cohorts', cohort.courseId] }),
+      onSuccess: () => client.invalidateQueries({ queryKey: COHORTS_KEY }),
+    }),
+    /** RF-TUR-001: alterar identificação, período e datas. */
+    update: useMutation({
+      mutationFn: ({
+        id,
+        ...body
+      }: {
+        id: string;
+        identification: string;
+        term: string;
+        startsAt: string;
+        endsAt: string;
+      }) => http.patch<CohortDto>(`/cohorts/${id}`, body),
+      onSuccess: () => client.invalidateQueries({ queryKey: COHORTS_KEY }),
     }),
     deactivate: useMutation({
       mutationFn: (cohort: CohortDto) => http.post(`/cohorts/${cohort.id}/deactivation`),
-      onSuccess: (_result, cohort) =>
-        client.invalidateQueries({ queryKey: ['cohorts', cohort.courseId] }),
+      onSuccess: () => client.invalidateQueries({ queryKey: COHORTS_KEY }),
     }),
     assignProfessor: useMutation({
       mutationFn: ({ cohortId, userId }: { cohortId: string; userId: string }) =>

@@ -65,7 +65,7 @@ export function EventsPage() {
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
   const coursesQuery = useCourses(can('COURSE:READ'));
   const courses = useMemo(() => coursesQuery.data ?? [], [coursesQuery.data]);
-  const { cohorts } = useCohorts(can('COHORT:READ') ? courses : []);
+  const { cohorts } = useCohorts(can('COHORT:READ'));
   const templates = useTemplates(can('TEMPLATE:READ') && can('EVENT:CREATE'));
   const mutations = useEventMutations();
 
