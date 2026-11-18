@@ -1,6 +1,14 @@
 import { expect, test } from '@playwright/test';
 
-import { ApiSession, buildScenario, PASSWORD, uniqueSuffix, type Scenario } from './support/api';
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  ApiSession,
+  buildScenario,
+  PASSWORD,
+  uniqueSuffix,
+  type Scenario,
+} from './support/api';
 import { login, shot } from './support/ui';
 
 /** Tela de Acesso e Autenticação: RF-ACS-001 a RF-ACS-008 (e o aceite de RF-ACS-009). */
@@ -131,4 +139,73 @@ test('ACS-009: aceite de convite cria a conta pela tela', async ({ page }) => {
 
   await login(page, email, PASSWORD);
   await expect(page.getByText('Gabriel Convidado').first()).toBeVisible();
+});
+
+test('ACS-005/008: idioma publicado, instituição e permissões da sessão, revisão por usuário', async ({
+  page,
+}) => {
+  // Item 8: autenticado em /entrar vai ao painel.
+  await login(page, scenario.students[0]!.email, PASSWORD);
+  await page.goto('/entrar');
+  await expect.soft(page, '/entrar com sessão').toHaveURL(/\/admin\/dashboard$/);
+
+  // Item 3: só pt-BR nos seletores.
+  await page.goto('/admin/acesso');
+  const idioma = page.getByRole('combobox', { name: 'Idioma' });
+  await expect.soft(idioma.locator('option')).toHaveText(['Português (Brasil)']);
+  await page.goto('/admin/idioma');
+  await expect.soft(page.getByRole('radio')).toHaveCount(1);
+  await expect.soft(page.getByText('English (United States)')).toHaveCount(0);
+
+  // Item 4 e 6: nome da instituição e resumo das permissões, por papel.
+  const pill = (label: string) =>
+    page.getByText(label, { exact: true }).locator('xpath=following-sibling::p').first();
+  for (const account of [
+    scenario.students[0]!,
+    scenario.professor,
+    scenario.coordinator,
+    scenario.institutionAdmin,
+  ]) {
+    await login(page, account.email, PASSWORD);
+    await page.goto('/admin/acesso');
+    await expect
+      .soft(pill('Instituição'), `instituição de ${account.name}`)
+      .toHaveText(scenario.institution.name);
+    await expect.soft(pill('Acesso')).toHaveText(/^\d+ permissões em \d+ áreas$/);
+    console.log(`${account.name}: ${await pill('Acesso').textContent()}`);
+  }
+  await page.getByText('Ver permissões efetivas').click();
+  await expect.soft(page.getByText('Instituição', { exact: true }).last()).toBeVisible();
+  await shot(page, 'acs-08-sessao-admin-institucional');
+
+  await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await page.goto('/admin/acesso');
+  await expect.soft(pill('Instituição')).toHaveText('Todas as instituições');
+
+  // Item 5: revisar as concessões de um usuário.
+  const prof = await ApiSession.login(scenario.professor.email, PASSWORD);
+  const [first, second] = [scenario.students[0]!, scenario.otherProfessor];
+  const g1 = await prof.post<{ id: string }>('/permission-grants', {
+    beneficiaryId: first.id,
+    permission: 'TEAM:CREATE',
+    validUntil: null,
+  });
+  const g2 = await prof.post<{ id: string }>('/permission-grants', {
+    beneficiaryId: second.id,
+    permission: 'ARTICLE:GRADE',
+    validUntil: null,
+  });
+  await login(page, scenario.professor.email, PASSWORD);
+  await page.goto('/admin/acesso');
+  const review = page.getByRole('combobox', { name: 'Usuário a revisar' });
+  await expect(review).toContainText(first.name);
+  await expect(review).toContainText(second.name);
+  await review.selectOption({ label: second.name });
+  await expect.soft(page.locator('article', { hasText: second.name })).toHaveCount(1);
+  await expect.soft(page.locator('article', { hasText: first.name })).toHaveCount(0);
+  await shot(page, 'acs-08-revisao-por-usuario');
+  await review.selectOption({ label: 'Todos os usuários' });
+  await expect.soft(page.locator('article', { hasText: first.name })).toHaveCount(1);
+  await prof.request('DELETE', `/permission-grants/${g1.id}`);
+  await prof.request('DELETE', `/permission-grants/${g2.id}`);
 });

@@ -9,7 +9,7 @@ import { hasPermission, IDENTITY_KEY, PageScaffold, useCurrentUser } from '@feat
 import { getErrorCode } from '@shared/api/apiError';
 import { useUserNames, useUserSearch } from '@shared/api/directory';
 import { fieldErrorsOf, http } from '@shared/api/http';
-import { changeLanguage, i18n, supportedLanguages } from '@shared/i18n';
+import { changeLanguage, i18n, selectableLanguages } from '@shared/i18n';
 import {
   Button,
   CheckCircleIcon,
@@ -44,13 +44,53 @@ type AccessAccountPageProps = {
   onSignOut: () => void;
 };
 
-const roleView = {
-  systemAdmin: { label: 'ADMINISTRADOR DO SISTEMA', permissions: 'Instituições e administradores' },
-  advisor: { label: 'PROFESSOR', permissions: 'Orientação e revisão' },
-  coordinator: { label: 'COORDENADOR', permissions: 'Gestão acadêmica' },
-  institutionAdmin: { label: 'ADMINISTRADOR', permissions: 'Administração institucional' },
-  student: { label: 'ALUNO', permissions: 'Autoria e colaboração' },
+const roleLabel = {
+  systemAdmin: 'ADMINISTRADOR DO SISTEMA',
+  advisor: 'PROFESSOR',
+  coordinator: 'COORDENADOR',
+  institutionAdmin: 'ADMINISTRADOR',
+  student: 'ALUNO',
 } as const;
+
+/** O nome de cada recurso do catálogo de permissões (URS §2.3), para leitura humana. */
+const resourceLabel: Record<string, string> = {
+  AI_SUMMARY: 'Resumo por IA',
+  ARTICLE: 'Artigo',
+  AUTHORSHIP_SIGNAL: 'Sinal de autoria',
+  COHORT: 'Turma',
+  COMPLIANCE_CHECK: 'Conformidade',
+  CONTRIBUTION: 'Contribuição',
+  COURSE: 'Curso',
+  ENROLLMENT: 'Matrícula',
+  EVENT: 'Evento',
+  INSTITUTION: 'Instituição',
+  INVITATION: 'Convite',
+  MESSAGE: 'Mensagem',
+  MILESTONE: 'Etapa',
+  NOTIFICATION: 'Notificação',
+  PERMISSION_GRANT: 'Concessão',
+  PROGRESS: 'Acompanhamento',
+  PUBLICATION: 'Publicação',
+  REFERENCE: 'Referência',
+  REMARK: 'Apontamento',
+  REPORT: 'Relatório',
+  RISK_SIGNAL: 'Sinal de risco',
+  SIMILARITY_CHECK: 'Similaridade',
+  SUBMISSION: 'Entrega',
+  TEAM: 'Equipe',
+  TEMPLATE: 'Template',
+};
+
+/** As permissões efetivas da sessão agrupadas por recurso (RF-ACS-001 RN2). */
+function groupPermissions(permissions: readonly string[]) {
+  const groups = new Map<string, string[]>();
+  for (const code of permissions) {
+    const [resource = code, action = ''] = code.split(':');
+    const label = resourceLabel[resource] ?? resource;
+    groups.set(label, [...(groups.get(label) ?? []), action]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
+}
 
 const grantErrors: Record<string, string> = {
   GRANT_NOT_HELD_BY_GRANTER: 'Você só pode conceder permissões que possui.',
@@ -89,6 +129,7 @@ export function AccessAccountPage({ onSignOut }: AccessAccountPageProps) {
   const [beneficiaryId, setBeneficiaryId] = useState('');
   const [permission, setPermission] = useState('');
   const [validUntil, setValidUntil] = useState('');
+  const [reviewedUserId, setReviewedUserId] = useState('');
 
   const nameValue = profileName ?? profile.data?.name ?? currentUser.name;
   const areaValue = researchArea ?? profile.data?.expertiseArea ?? '';
@@ -97,14 +138,38 @@ export function AccessAccountPage({ onSignOut }: AccessAccountPageProps) {
   const canRevoke = hasPermission(currentUser, 'PERMISSION_GRANT:REVOKE');
   const showGrants = canReadGrants || canGrant;
 
-  const grants = useQuery({
+  // RF-INS-001 RN4: o usuário vinculado lê a própria instituição para exibir o vínculo.
+  const institution = useQuery({
+    queryKey: ['institutions', currentUser.institutionId, 'own'],
+    queryFn: () =>
+      http.get<{ id: string; name: string }>(`/institutions/${currentUser.institutionId}`),
+    enabled: Boolean(currentUser.institutionId),
+    staleTime: 5 * 60_000,
+  });
+  const institutionLabel = currentUser.institutionId
+    ? (institution.data?.name ?? (institution.isPending ? 'Carregando…' : '—'))
+    : currentUser.institution || '—';
+  const permissionGroups = groupPermissions(currentUser.permissions);
+
+  // Todas as concessões ativas: alimentam a escolha do usuário a revisar (RF-ACS-008).
+  const allGrants = useQuery({
     queryKey: ['permission-grants'],
     queryFn: () => http.all<PermissionGrant>('/permission-grants'),
     enabled: canReadGrants,
   });
+  const reviewedGrants = useQuery({
+    queryKey: ['permission-grants', reviewedUserId],
+    queryFn: () =>
+      http.all<PermissionGrant>('/permission-grants', { beneficiaryId: reviewedUserId }),
+    enabled: canReadGrants && Boolean(reviewedUserId),
+  });
+  const grants = reviewedUserId ? reviewedGrants : allGrants;
   const candidates = useUserSearch({ search: beneficiarySearch.trim() }, canGrant);
   const names = useUserNames(
-    (grants.data ?? []).flatMap((grant) => [grant.beneficiaryId, grant.granterId]),
+    (allGrants.data ?? []).flatMap((grant) => [grant.beneficiaryId, grant.granterId]),
+  );
+  const reviewable = [...new Set((allGrants.data ?? []).map((grant) => grant.beneficiaryId))].sort(
+    (a, b) => names.nameOf(a).localeCompare(names.nameOf(b), 'pt-BR'),
   );
 
   const saveProfile = useMutation({
@@ -207,13 +272,26 @@ export function AccessAccountPage({ onSignOut }: AccessAccountPageProps) {
             title="Sessão e identidade"
           >
             <div className="grid gap-4 md:grid-cols-3">
-              <SessionPill label="Papel" value={roleView[currentUser.role].label} />
+              <SessionPill label="Papel" value={roleLabel[currentUser.role]} />
+              <SessionPill label="Instituição" value={institutionLabel} />
               <SessionPill
-                label="Instituição"
-                value={currentUser.institution || (currentUser.institutionId ? 'Vinculada' : '—')}
+                label="Acesso"
+                value={`${currentUser.permissions.length} permissões em ${permissionGroups.length} áreas`}
               />
-              <SessionPill label="Acesso" value={roleView[currentUser.role].permissions} />
             </div>
+            <details className="mt-4 rounded-lg border border-vince-border bg-[#fffafa] p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-vince-primary">
+                Ver permissões efetivas
+              </summary>
+              <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                {permissionGroups.map(([area, actions]) => (
+                  <div key={area}>
+                    <dt className="font-bold text-vince-text">{area}</dt>
+                    <dd className="text-vince-muted">{actions.join(', ')}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button onClick={onSignOut} variant="outline">
                 <LogOutIcon className="h-5 w-5" />
@@ -254,7 +332,7 @@ export function AccessAccountPage({ onSignOut }: AccessAccountPageProps) {
                   onChange={(event) => setLanguage(event.target.value)}
                   value={language}
                 >
-                  {supportedLanguages.map((option) => (
+                  {selectableLanguages.map((option) => (
                     <option key={option.code} value={option.code}>
                       {option.nativeName}
                     </option>
@@ -403,7 +481,27 @@ export function AccessAccountPage({ onSignOut }: AccessAccountPageProps) {
               </form>
             )}
 
-            <div className="mt-7 space-y-3">
+            {canReadGrants && (
+              <label className="mt-7 block">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                  Usuário a revisar
+                </span>
+                <select
+                  className="h-11 w-full rounded-padrao border border-vince-border bg-white px-4 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => setReviewedUserId(event.target.value)}
+                  value={reviewedUserId}
+                >
+                  <option value="">Todos os usuários</option>
+                  {reviewable.map((id) => (
+                    <option key={id} value={id}>
+                      {names.nameOf(id)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="mt-5 space-y-3">
               {canReadGrants && grants.data?.length === 0 && (
                 <p className="text-sm text-vince-muted">Nenhuma concessão ativa.</p>
               )}

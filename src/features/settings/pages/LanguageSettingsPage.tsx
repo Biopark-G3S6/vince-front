@@ -8,7 +8,7 @@ import {
   changeLanguage,
   createFormatters,
   DEFAULT_LANGUAGE,
-  supportedLanguages,
+  selectableLanguages,
 } from '@shared/i18n';
 import { cn } from '@shared/lib/cn';
 import { Button, GlobeIcon, Notice, SectionPanel } from '@shared/ui';
@@ -65,7 +65,7 @@ export function LanguageSettingsPage() {
           <form onSubmit={(event) => void handleSubmit(event)}>
             <fieldset className="space-y-3">
               <legend className="sr-only">{t('language.title')}</legend>
-              {supportedLanguages.map((language) => {
+              {selectableLanguages.map((language) => {
                 const checked = language.code === selected;
 
                 return (
@@ -96,16 +96,11 @@ export function LanguageSettingsPage() {
                     <span className="flex flex-wrap justify-end gap-2 text-xs font-bold uppercase text-vince-primary">
                       {language.code === current && <span>{t('language.current')}</span>}
                       {language.code === DEFAULT_LANGUAGE && <span>{t('language.default')}</span>}
-                      {language.preview && <span>{t('language.preview')}</span>}
                     </span>
                   </label>
                 );
               })}
             </fieldset>
-
-            {supportedLanguages.some((language) => language.preview) && (
-              <p className="mt-3 text-sm text-vince-muted">{t('language.previewHint')}</p>
-            )}
 
             <div className="mt-6 flex flex-wrap items-center justify-end gap-4">
               {selected === current && (

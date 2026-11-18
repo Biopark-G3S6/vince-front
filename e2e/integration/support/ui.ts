@@ -4,6 +4,8 @@ export const SHOTS_DIR = process.env.E2E_SHOTS_DIR ?? 'test-results/integration-
 
 /** Entra pela tela de login, como o usuário faz (RF-ACS-001). */
 export async function login(page: Page, email: string, password: string) {
+  // Com sessão ativa, /entrar leva ao painel: trocar de conta começa sem sessão.
+  await page.context().clearCookies();
   await page.goto('/entrar');
   await page.getByLabel('E-mail', { exact: true }).fill(email);
   await page.getByLabel('Senha', { exact: true }).fill(password);

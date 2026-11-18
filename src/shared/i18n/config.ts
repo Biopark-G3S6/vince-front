@@ -31,6 +31,12 @@ export const supportedLanguages = languages.filter(
   (language) => !language.preview || import.meta.env.DEV,
 );
 
+/**
+ * O que os seletores oferecem ao usuário: só os idiomas publicados. O backend aceita apenas
+ * `pt-BR` no perfil (RF-INT-001 E1), e oferecer a prévia faria o perfil inteiro ser recusado.
+ */
+export const selectableLanguages = languages.filter((language) => !language.preview);
+
 const STORAGE_KEY = 'vinceart.language';
 
 const catalogs = import.meta.glob<{ default: ResourceKey }>('./locales/*/*.json');

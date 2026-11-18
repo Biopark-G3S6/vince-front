@@ -4,6 +4,7 @@ export {
   i18n,
   isSupportedLanguage,
   resolveInitialLanguage,
+  selectableLanguages,
   supportedLanguages,
   type LanguageOption,
 } from './config';

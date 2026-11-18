@@ -269,6 +269,12 @@ function AppRoutes() {
   useEffect(() => {
     if (resolving) return;
 
+    // Com sessão ativa, a tela de entrada não tem o que oferecer: vai ao painel.
+    if (route === 'login' && authenticatedUser) {
+      navigateTo('/admin/dashboard', true);
+      return;
+    }
+
     if (protectedSection && !authenticatedUser) {
       navigateTo('/entrar', true);
       return;
@@ -277,7 +283,7 @@ function AppRoutes() {
     if (protectedSection && !permitted) {
       navigateTo('/admin/dashboard', true);
     }
-  }, [authenticatedUser, navigateTo, permitted, protectedSection, resolving]);
+  }, [authenticatedUser, navigateTo, permitted, protectedSection, resolving, route]);
 
   if (resolving) return loading;
 
