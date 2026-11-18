@@ -25,7 +25,8 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      testIgnore: '**/responsive.spec.ts',
+      // O testIgnore do projeto substitui o global: a integração precisa constar aqui também.
+      testIgnore: ['**/responsive.spec.ts', '**/integration/**'],
       use: { ...devices['Pixel 7'] },
     },
   ],
