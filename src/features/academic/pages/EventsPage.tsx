@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { hasPermission, useCurrentUser } from '@features/admin';
 import { useUserNames, useUserSearch } from '@shared/api/directory';
-import { Button, CalendarIcon, EmptyState, PlusIcon, UsersIcon } from '@shared/ui';
+import { Button, CalendarIcon, ConfirmDialog, EmptyState, PlusIcon, UsersIcon } from '@shared/ui';
 
 import { useCohorts } from '../api/cohortApi';
 import { describeAcademicError, useCourses } from '../api/courseApi';
@@ -57,6 +57,15 @@ const formatDate = (iso: string) =>
 
 type Action = 'create' | 'edit' | null;
 
+/** A ordem de exibição dos grupos (RF-EVT-004: eventos agrupados por escopo). */
+const scopeOrder: EventScopeType[] = ['INSTITUTION', 'COURSE', 'COHORT'];
+
+const dateInput = (iso: string) => {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
 /** RF-EVT-001 a RF-EVT-004: eventos por escopo, cronograma e orientadores. */
 export function EventsPage() {
   const user = useCurrentUser();
@@ -72,13 +81,46 @@ export function EventsPage() {
   const [filter, setFilter] = useState<'all' | 'active' | 'cancelled'>('all');
   const [selectedEventId, setSelectedEventId] = useState('');
   const [action, setAction] = useState<Action>(null);
-  const [scopeType, setScopeType] = useState<EventScopeType>(
-    user.roles.includes('institutionAdmin')
-      ? 'INSTITUTION'
-      : user.roles.includes('coordinator')
-        ? 'COURSE'
-        : 'COHORT',
+  const [advisorSearch, setAdvisorSearch] = useState('');
+  const [editingMilestoneId, setEditingMilestoneId] = useState('');
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  /*
+   * Quem é dono de qual escopo — o mesmo critério do backend (`EventScope.owns`, ADR-0032):
+   * a propriedade desce a hierarquia. O administrador é dono de tudo na instituição; o
+   * coordenador, de tudo no seu curso; o professor designado, da sua turma.
+   */
+  const administers = user.roles.includes('institutionAdmin') && Boolean(user.institutionId);
+  const coordinatedCourses = courses.filter(
+    (course) => course.active && (administers || course.coordinatorId === user.id),
   );
+  const coordinatedCourseIds = new Set(
+    courses.filter((course) => course.coordinatorId === user.id).map((course) => course.id),
+  );
+  const ownCohorts = cohorts.filter(
+    (cohort) =>
+      cohort.active &&
+      (coordinatedCourseIds.has(cohort.courseId) ||
+        (user.roles.includes('advisor') && !user.roles.includes('student'))),
+  );
+  const allowedScopes: EventScopeType[] = [
+    ...(ownCohorts.length > 0 ? (['COHORT'] as const) : []),
+    ...(coordinatedCourses.length > 0 ? (['COURSE'] as const) : []),
+    ...(administers ? (['INSTITUTION'] as const) : []),
+  ];
+  const [chosenScope, setScopeType] = useState<EventScopeType | null>(null);
+  const scopeType: EventScopeType =
+    chosenScope && allowedScopes.includes(chosenScope)
+      ? chosenScope
+      : (allowedScopes.at(-1) ?? 'COHORT');
+
+  const ownsEvent = (event: EventDto) =>
+    event.ownerId === user.id ||
+    (administers && event.institutionId === user.institutionId) ||
+    (event.scopeType !== 'INSTITUTION' &&
+      event.courseId !== null &&
+      coordinatedCourseIds.has(event.courseId)) ||
+    (event.scopeType === 'COHORT' && ownCohorts.some((cohort) => cohort.id === event.scopeId));
 
   const visibleEvents = events.filter(
     (event) =>
@@ -90,7 +132,11 @@ export function EventsPage() {
   const details = useEventDetails(selectedEvent?.id);
   const advisorIds = (details.advisors.data ?? []).map((item) => item.userId);
   const names = useUserNames([...advisorIds, selectedEvent?.ownerId]);
-  const professors = useUserSearch({ role: 'PROFESSOR' }, can('EVENT:ASSIGN_ADVISOR'));
+  const manages = selectedEvent ? ownsEvent(selectedEvent) : false;
+  const professors = useUserSearch(
+    { role: 'PROFESSOR', search: advisorSearch.trim() || undefined },
+    can('EVENT:ASSIGN_ADVISOR') && manages,
+  );
 
   const scopeName = (event: EventDto) => {
     if (event.scopeType === 'COURSE')
@@ -133,6 +179,10 @@ export function EventsPage() {
     }
 
     if (action === 'create') {
+      if (allowedScopes.length === 0) {
+        toast.error('Seu vínculo não permite criar eventos.');
+        return;
+      }
       const scopeId =
         scopeType === 'INSTITUTION'
           ? (user.institutionId ?? '')
@@ -181,12 +231,29 @@ export function EventsPage() {
     if (done) formElement.reset();
   }
 
+  async function updateMilestone(submitEvent: FormEvent<HTMLFormElement>, milestoneId: string) {
+    submitEvent.preventDefault();
+    if (!selectedEvent) return;
+    const form = new FormData(submitEvent.currentTarget);
+    const done = await run(
+      () =>
+        mutations.updateMilestone.mutateAsync({
+          eventId: selectedEvent.id,
+          milestoneId,
+          name: String(form.get('name') ?? '').trim(),
+          dueAt: new Date(`${String(form.get('dueAt'))}T23:59:00`).toISOString(),
+        }),
+      'Etapa atualizada.',
+    );
+    if (done) setEditingMilestoneId('');
+  }
+
   const editing = action === 'edit' ? selectedEvent : undefined;
 
   return (
     <PageScaffold
       actions={
-        can('EVENT:CREATE') ? (
+        can('EVENT:CREATE') && allowedScopes.length > 0 ? (
           <Button onClick={() => setAction('create')}>
             <PlusIcon className="h-5 w-5" />
             Novo evento
@@ -221,9 +288,11 @@ export function EventsPage() {
                 onChange={(change) => setScopeType(change.target.value as EventScopeType)}
                 value={scopeType}
               >
-                <option value="COHORT">Turma</option>
-                <option value="COURSE">Curso</option>
-                <option value="INSTITUTION">Instituição</option>
+                {allowedScopes.map((scope) => (
+                  <option key={scope} value={scope}>
+                    {scopeLabel[scope]}
+                  </option>
+                ))}
               </select>
             </label>
             {scopeType !== 'INSTITUTION' && (
@@ -234,20 +303,16 @@ export function EventsPage() {
                 <select className={academicFieldClass} name="scopeId" required>
                   <option value="">Selecione</option>
                   {scopeType === 'COHORT'
-                    ? cohorts
-                        .filter((cohort) => cohort.active)
-                        .map((cohort) => (
-                          <option key={cohort.id} value={cohort.id}>
-                            {cohort.identification} ({cohort.term})
-                          </option>
-                        ))
-                    : courses
-                        .filter((course) => course.active)
-                        .map((course) => (
-                          <option key={course.id} value={course.id}>
-                            {course.name}
-                          </option>
-                        ))}
+                    ? ownCohorts.map((cohort) => (
+                        <option key={cohort.id} value={cohort.id}>
+                          {cohort.identification} ({cohort.term})
+                        </option>
+                      ))
+                    : coordinatedCourses.map((course) => (
+                        <option key={course.id} value={course.id}>
+                          {course.name}
+                        </option>
+                      ))}
                 </select>
               </label>
             )}
@@ -349,41 +414,60 @@ export function EventsPage() {
 
       <section className="mt-6 grid min-w-0 gap-8 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="grid min-w-0 content-start gap-5">
-          {visibleEvents.map((event) => (
-            <article
-              className="rounded-lg border border-vince-border bg-white p-6 shadow-sm"
-              key={event.id}
-            >
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0">
-                  <div className="mb-3 flex flex-wrap items-center gap-3">
-                    <StatusBadge
-                      label={event.status === 'ACTIVE' ? 'Ativo' : 'Cancelado'}
-                      tone={event.status === 'ACTIVE' ? 'success' : 'muted'}
-                    />
-                    <span className="text-sm font-semibold text-vince-muted">
-                      {scopeLabel[event.scopeType]} · {scopeName(event) ?? '—'}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-extrabold leading-tight text-vince-text">
-                    {event.title}
-                  </h3>
-                  <p className="mt-2 text-vince-muted">{event.theme}</p>
-                </div>
-                <Button
-                  aria-label={`Abrir ${event.title}`}
-                  aria-pressed={event.id === selectedEvent?.id}
-                  onClick={() => setSelectedEventId(event.id)}
-                  variant={event.id === selectedEvent?.id ? 'primary' : 'outline'}
-                >
-                  Detalhes
-                </Button>
-              </div>
-              <p className="mt-4 text-sm text-vince-muted">
-                Até {event.maxTeams} equipes · até {event.maxTeamSize} integrantes por equipe
-              </p>
-            </article>
-          ))}
+          {scopeOrder.map((scope) => {
+            const group = visibleEvents.filter((event) => event.scopeType === scope);
+            if (group.length === 0) return null;
+            return (
+              <section
+                aria-label={`Eventos de ${scopeLabel[scope]}`}
+                className="grid gap-4"
+                key={scope}
+              >
+                <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
+                  {scope === 'INSTITUTION'
+                    ? 'Da instituição'
+                    : scope === 'COURSE'
+                      ? 'Por curso'
+                      : 'Por turma'}
+                </h2>
+                {group.map((event) => (
+                  <article
+                    className="rounded-lg border border-vince-border bg-white p-6 shadow-sm"
+                    key={event.id}
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="mb-3 flex flex-wrap items-center gap-3">
+                          <StatusBadge
+                            label={event.status === 'ACTIVE' ? 'Ativo' : 'Cancelado'}
+                            tone={event.status === 'ACTIVE' ? 'success' : 'muted'}
+                          />
+                          <span className="text-sm font-semibold text-vince-muted">
+                            {scopeLabel[event.scopeType]} · {scopeName(event) ?? '—'}
+                          </span>
+                        </div>
+                        <h3 className="text-xl font-extrabold leading-tight text-vince-text">
+                          {event.title}
+                        </h3>
+                        <p className="mt-2 text-vince-muted">{event.theme}</p>
+                      </div>
+                      <Button
+                        aria-label={`Abrir ${event.title}`}
+                        aria-pressed={event.id === selectedEvent?.id}
+                        onClick={() => setSelectedEventId(event.id)}
+                        variant={event.id === selectedEvent?.id ? 'primary' : 'outline'}
+                      >
+                        Detalhes
+                      </Button>
+                    </div>
+                    <p className="mt-4 text-sm text-vince-muted">
+                      Até {event.maxTeams} equipes · até {event.maxTeamSize} integrantes por equipe
+                    </p>
+                  </article>
+                ))}
+              </section>
+            );
+          })}
           {eventsQuery.isPending && (
             <p className="text-center text-vince-muted" role="status">
               Carregando eventos…
@@ -410,22 +494,20 @@ export function EventsPage() {
               <Info label="Problema de pesquisa" value={selectedEvent.researchProblem} />
               <Info label="Objetivos" value={selectedEvent.objectives} />
 
-              {selectedEvent.status === 'ACTIVE' && can('EVENT:UPDATE') && (
+              <a
+                className="inline-flex text-sm font-semibold text-vince-primary underline"
+                href={`/admin/equipes?evento=${selectedEvent.id}`}
+              >
+                Ver equipes do evento
+              </a>
+
+              {selectedEvent.status === 'ACTIVE' && manages && can('EVENT:UPDATE') && (
                 <div className="flex flex-wrap gap-3">
                   <Button onClick={() => setAction('edit')} size="sm" variant="outline">
                     Editar evento
                   </Button>
                   {can('EVENT:CANCEL') && (
-                    <Button
-                      onClick={() =>
-                        void run(
-                          () => mutations.cancel.mutateAsync(selectedEvent.id),
-                          'Evento cancelado.',
-                        )
-                      }
-                      size="sm"
-                      variant="outline"
-                    >
+                    <Button onClick={() => setConfirmCancel(true)} size="sm" variant="outline">
                       Cancelar evento
                     </Button>
                   )}
@@ -437,13 +519,64 @@ export function EventsPage() {
                 <ol className="space-y-3">
                   {(details.milestones.data ?? []).map((milestone) => (
                     <li className="rounded-lg border border-vince-border p-4" key={milestone.id}>
-                      <p className="font-bold text-vince-text">
-                        {milestone.order}. {milestone.name}
-                      </p>
-                      <p className="text-sm text-vince-muted">
-                        Prazo: {formatDate(milestone.dueAt)}
-                      </p>
-                      {selectedEvent.status === 'ACTIVE' && can('MILESTONE:DELETE') && (
+                      {editingMilestoneId === milestone.id ? (
+                        <form
+                          className="grid gap-3 sm:grid-cols-[1fr_170px]"
+                          onSubmit={(submitEvent) =>
+                            void updateMilestone(submitEvent, milestone.id)
+                          }
+                        >
+                          <AcademicField
+                            defaultValue={milestone.name}
+                            label="Nome da etapa"
+                            name="name"
+                            required
+                          />
+                          <AcademicField
+                            defaultValue={dateInput(milestone.dueAt)}
+                            label="Novo prazo"
+                            name="dueAt"
+                            required
+                            type="date"
+                          />
+                          <div className="flex gap-3 sm:col-span-2">
+                            <Button size="sm" type="submit">
+                              Salvar etapa
+                            </Button>
+                            <Button
+                              onClick={() => setEditingMilestoneId('')}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              Cancelar edição
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <p className="font-bold text-vince-text">
+                            {milestone.order}. {milestone.name}
+                          </p>
+                          <p className="text-sm text-vince-muted">
+                            Prazo: {formatDate(milestone.dueAt)}
+                          </p>
+                        </>
+                      )}
+                      {selectedEvent.status === 'ACTIVE' &&
+                        manages &&
+                        can('MILESTONE:UPDATE') &&
+                        editingMilestoneId !== milestone.id && (
+                          <button
+                            aria-label={`Editar etapa ${milestone.name}`}
+                            className="mr-4 mt-2 text-sm font-semibold text-vince-primary"
+                            onClick={() => setEditingMilestoneId(milestone.id)}
+                            type="button"
+                          >
+                            Editar
+                          </button>
+                        )}
+                      {selectedEvent.status === 'ACTIVE' && manages && can('MILESTONE:DELETE') && (
                         <button
                           aria-label={`Remover etapa ${milestone.name}`}
                           className="mt-2 text-sm font-semibold text-vince-primary"
@@ -468,7 +601,7 @@ export function EventsPage() {
                     <p className="text-sm text-vince-muted">Nenhuma etapa no cronograma.</p>
                   )}
                 </ol>
-                {selectedEvent.status === 'ACTIVE' && can('MILESTONE:CREATE') && (
+                {selectedEvent.status === 'ACTIVE' && manages && can('MILESTONE:CREATE') && (
                   <form
                     className="mt-4 grid gap-3 sm:grid-cols-[1fr_170px_auto]"
                     onSubmit={(submitEvent) => void addMilestone(submitEvent)}
@@ -491,7 +624,7 @@ export function EventsPage() {
                       key={advisorId}
                     >
                       <span className="font-medium text-vince-text">{names.nameOf(advisorId)}</span>
-                      {can('EVENT:REVOKE_ADVISOR') && (
+                      {manages && can('EVENT:REVOKE_ADVISOR') && (
                         <button
                           aria-label={`Revogar orientador ${names.nameOf(advisorId)}`}
                           className="text-sm font-semibold text-vince-primary"
@@ -516,7 +649,7 @@ export function EventsPage() {
                     <p className="text-sm text-vince-muted">Nenhum orientador designado.</p>
                   )}
                 </ul>
-                {selectedEvent.status === 'ACTIVE' && can('EVENT:ASSIGN_ADVISOR') && (
+                {selectedEvent.status === 'ACTIVE' && manages && can('EVENT:ASSIGN_ADVISOR') && (
                   <form
                     className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"
                     onSubmit={(submitEvent) => {
@@ -535,6 +668,18 @@ export function EventsPage() {
                       );
                     }}
                   >
+                    <label className="block sm:col-span-2">
+                      <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                        Buscar professor
+                      </span>
+                      <input
+                        className={academicFieldClass}
+                        onChange={(change) => setAdvisorSearch(change.target.value)}
+                        placeholder="Nome ou e-mail"
+                        type="search"
+                        value={advisorSearch}
+                      />
+                    </label>
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-vince-muted">
                         Professor orientador
@@ -546,6 +691,7 @@ export function EventsPage() {
                           .map((professor) => (
                             <option key={professor.id} value={professor.id}>
                               {professor.name}
+                              {professor.email ? ` (${professor.email})` : ''}
                             </option>
                           ))}
                       </select>
@@ -553,6 +699,14 @@ export function EventsPage() {
                     <Button className="self-end" type="submit">
                       Designar orientador
                     </Button>
+                    <p className="text-sm text-vince-muted sm:col-span-2">
+                      Só orientam professores do escopo do evento:{' '}
+                      {selectedEvent.scopeType === 'COHORT'
+                        ? 'os designados à turma ou quem coordena o curso.'
+                        : selectedEvent.scopeType === 'COURSE'
+                          ? 'os das turmas do curso ou quem o coordena.'
+                          : 'os da instituição.'}
+                    </p>
                   </form>
                 )}
               </div>
@@ -562,6 +716,20 @@ export function EventsPage() {
           )}
         </SectionPanel>
       </section>
+      <ConfirmDialog
+        cancelLabel="Voltar"
+        confirmLabel="Cancelar evento"
+        description="O evento cancelado deixa de aceitar equipes e entregas. A ação não pode ser desfeita."
+        onConfirm={() => {
+          setConfirmCancel(false);
+          if (selectedEvent) {
+            void run(() => mutations.cancel.mutateAsync(selectedEvent.id), 'Evento cancelado.');
+          }
+        }}
+        onOpenChange={setConfirmCancel}
+        open={confirmCancel}
+        title="Cancelar evento?"
+      />
     </PageScaffold>
   );
 }
