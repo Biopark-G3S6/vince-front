@@ -412,10 +412,6 @@ function assertCreator(actorId: string) {
   if (!names[actorId]) throw new ApiError('PERMISSION_DENIED');
 }
 
-function canMaintainLegacy(actorId: string, courseId: string | null) {
-  return actorId === ADMIN_ID || (actorId === COORDINATOR_ID && courseId === OWN_COURSE);
-}
-
 function canManageEvent(actorId: string, event: EventTemplate) {
   if (actorId === PROFESSOR_ID) {
     return event.createdById === actorId || event.advisorIds.includes(actorId);
@@ -444,16 +440,6 @@ function canViewEvent(actorId: string, event: EventTemplate, registry: RegistryD
   );
 }
 
-function canMaintainTemplate(actorId: string, template: StoredTemplate, registry: RegistryDb) {
-  if (template.visibility === 'standard') return false;
-  if (template.visibility === 'personal') return template.ownerId === actorId;
-  if (template.visibility === 'event') {
-    const event = registry.events.find((candidate) => candidate.id === template.eventId);
-    return !!event && canManageEvent(actorId, event);
-  }
-  return canMaintainLegacy(actorId, template.courseId);
-}
-
 function canViewTemplate(actorId: string, template: StoredTemplate, registry: RegistryDb) {
   if (template.visibility === 'personal') {
     return (
@@ -470,123 +456,6 @@ function canViewTemplate(actorId: string, template: StoredTemplate, registry: Re
   return true;
 }
 
-export function listTemplates(actorId: string, permissions: string[] = []) {
-  if (isBackendEnabled()) {
-    const includeInactive =
-      permissions.includes('TEMPLATE:UPDATE') || permissions.includes('TEMPLATE:DEACTIVATE');
-    return apiPagedRequest<{
-      id: string;
-      courseId: string | null;
-      name: string;
-      description: string | null;
-      active: boolean;
-      currentVersionNumber: number;
-      currentVersionId: string;
-      content: JSONContent;
-      versions?: Array<{
-        id: string;
-        versionNumber: number;
-        content: JSONContent;
-        createdBy: string;
-        createdAt: string;
-      }>;
-    }>(
-      `/article-templates?page=1&pageSize=100${includeInactive ? '&includeInactive=true' : ''}`,
-    ).then(({ data }) =>
-      data.map((template): StoredTemplate => {
-        const versions = (
-          template.versions?.length
-            ? [...template.versions]
-            : [
-                {
-                  id: template.currentVersionId,
-                  versionNumber: template.currentVersionNumber,
-                  content: template.content,
-                  createdAt: '',
-                  createdBy: '',
-                },
-              ]
-        ).sort((left, right) => left.versionNumber - right.versionNumber);
-        const current =
-          versions.find((version) => version.versionNumber === template.currentVersionNumber) ??
-          versions[0]!;
-        const format = templateFormat(current.content);
-        return {
-          ...format,
-          active: template.active,
-          canMaintain:
-            permissions.includes('TEMPLATE:UPDATE') || permissions.includes('TEMPLATE:DEACTIVATE'),
-          courseId: template.courseId,
-          description: template.description ?? '',
-          id: template.id,
-          label: template.name,
-          preview: template.courseId ? 'abnt' : 'official',
-          title: template.name,
-          versions: versions.map((version) => ({
-            content: version.content,
-            createdAt: version.createdAt,
-            createdBy: version.createdBy,
-            number: version.versionNumber,
-            format: templateFormat(version.content),
-          })),
-          visibility: template.courseId ? 'event' : 'standard',
-        };
-      }),
-    );
-  }
-  return respond(() => {
-    assertCreator(actorId);
-    const registry = db.read();
-    return registry.templates
-      .filter((template) => canViewTemplate(actorId, template, registry))
-      .map((template) => {
-        const versions =
-          template.visibility === 'personal' && template.ownerId !== actorId
-            ? template.versions.filter((version) =>
-                registry.events.some(
-                  (event) =>
-                    event.templateId === template.id &&
-                    event.templateVersion === version.number &&
-                    canViewEvent(actorId, event, registry),
-                ),
-              )
-            : template.versions;
-        return {
-          ...template,
-          ...(template.visibility === 'personal' && template.ownerId !== actorId
-            ? versions.at(-1)?.format
-            : undefined),
-          versions,
-          canMaintain: canMaintainTemplate(actorId, template, registry),
-        };
-      });
-  });
-}
-
-export function listTemplateCourses() {
-  if (isBackendEnabled()) {
-    return apiPagedRequest<{ id: string; name: string }>('/courses?page=1&pageSize=100').then(
-      ({ data }) => data,
-    );
-  }
-  return Promise.resolve(courses);
-}
-
-function templateFormat(content: JSONContent): TemplateFormat {
-  const attrs = content.attrs;
-  const value = attrs && typeof attrs === 'object' ? attrs.vinceFormat : undefined;
-  if (!value || typeof value !== 'object') return { ...defaultFormat };
-  const format = value as Record<string, unknown>;
-  return {
-    fontFamily:
-      typeof format.fontFamily === 'string' ? format.fontFamily : defaultFormat.fontFamily,
-    fontSize: typeof format.fontSize === 'number' ? format.fontSize : defaultFormat.fontSize,
-    lineHeight:
-      typeof format.lineHeight === 'number' ? format.lineHeight : defaultFormat.lineHeight,
-    textAlign: format.textAlign === 'left' ? 'left' : defaultFormat.textAlign,
-  };
-}
-
 export type SaveTemplateInput = {
   content: JSONContent;
   courseId: string | null;
@@ -598,114 +467,6 @@ export type SaveTemplateInput = {
   visibility?: StoredTemplate['visibility'];
   eventId?: string;
 };
-
-/** Uma alteração cria versão nova; modelos pessoais pertencem ao autor. */
-export function saveTemplate(actorId: string, input: SaveTemplateInput) {
-  if (isBackendEnabled()) {
-    const body = {
-      name: input.title.trim(),
-      description: input.description,
-      courseId: input.courseId,
-      content: {
-        ...input.content,
-        attrs: {
-          ...input.content.attrs,
-          vinceFormat: input.format,
-        },
-      },
-    };
-    const path = input.id
-      ? `/article-templates/${requireUuid(input.id, 'RESOURCE_NOT_FOUND')}`
-      : '/article-templates';
-    return apiRequest(path, { body, method: input.id ? 'PATCH' : 'POST' }).then(() => undefined);
-  }
-  return respond(() => {
-    assertCreator(actorId);
-    if (!input.title.trim()) throw new ApiError('VALIDATION_FAILED');
-    db.update((draft) => {
-      const existing = draft.templates.find((template) => template.id === input.id);
-      if (input.id && !existing) throw new ApiError('RESOURCE_NOT_FOUND');
-      if (existing && !canMaintainTemplate(actorId, existing, draft))
-        throw new ApiError('PERMISSION_DENIED');
-      const visibility =
-        input.visibility ??
-        existing?.visibility ??
-        (actorId === PROFESSOR_ID || isStudent(actorId) ? 'personal' : undefined);
-      const eventId = visibility === 'event' ? (input.eventId ?? existing?.eventId) : undefined;
-      if (visibility === 'standard') throw new ApiError('PERMISSION_DENIED');
-      if (visibility === 'event') {
-        const event = draft.events.find((candidate) => candidate.id === eventId);
-        if (!event) throw new ApiError('RESOURCE_NOT_FOUND');
-        if (!canManageEvent(actorId, event)) throw new ApiError('PERMISSION_DENIED');
-      } else if (visibility === 'personal') {
-        if (
-          (existing?.ownerId && existing.ownerId !== actorId) ||
-          (input.ownerId && input.ownerId !== actorId)
-        )
-          throw new ApiError('PERMISSION_DENIED');
-      } else if (!canMaintainLegacy(actorId, input.courseId)) {
-        throw new ApiError('PERMISSION_DENIED');
-      }
-      const version = {
-        content: input.content,
-        format: { ...input.format },
-        createdAt: new Date().toISOString(),
-        createdBy: names[actorId]!,
-        number: existing ? currentVersion(existing).number + 1 : 1,
-      };
-      const fields = {
-        ...input.format,
-        courseId: visibility === 'personal' ? null : input.courseId,
-        description: input.description.trim(),
-        label: input.title.trim(),
-        title: input.title.trim(),
-        visibility,
-        eventId,
-        ownerId: existing?.ownerId ?? actorId,
-      };
-      if (existing) {
-        const previousFormat = {
-          fontFamily: existing.fontFamily,
-          fontSize: existing.fontSize,
-          lineHeight: existing.lineHeight,
-          textAlign: existing.textAlign,
-        };
-        existing.versions.forEach((previous) => {
-          previous.format ??= { ...previousFormat };
-        });
-        Object.assign(existing, fields);
-        existing.versions.push(version);
-      } else {
-        draft.templates.push({
-          ...fields,
-          active: true,
-          id: createId('template'),
-          preview: 'official',
-          versions: [version],
-        });
-      }
-    });
-  });
-}
-
-export function setTemplateActive(actorId: string, templateId: string, active: boolean) {
-  if (isBackendEnabled()) {
-    if (active) return Promise.reject(new ApiError('PERMISSION_DENIED'));
-    return apiRequest(
-      `/article-templates/${requireUuid(templateId, 'RESOURCE_NOT_FOUND')}/deactivation`,
-      { body: {}, method: 'POST' },
-    ).then(() => undefined);
-  }
-  return respond(() => {
-    assertCreator(actorId);
-    db.update((draft) => {
-      const template = draft.templates.find((candidate) => candidate.id === templateId);
-      if (!template) throw new ApiError('RESOURCE_NOT_FOUND');
-      if (!canMaintainTemplate(actorId, template, draft)) throw new ApiError('PERMISSION_DENIED');
-      template.active = active;
-    });
-  });
-}
 
 export function listEvents(actorId: string) {
   if (isBackendEnabled()) return Promise.resolve([] as EventTemplate[]);
@@ -798,73 +559,6 @@ export function createEvent(actorId: string, input: CreateEventInput) {
   });
 }
 
-export function listEventRegistrations(actorId: string) {
-  if (isBackendEnabled()) return Promise.resolve([] as EventRegistration[]);
-  return respond(() => {
-    assertCreator(actorId);
-    return db.read().registrations.filter((registration) => registration.studentId === actorId);
-  });
-}
-
-export function registerForEvent(actorId: string, eventId: string) {
-  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
-  return respond((): EventRegistration => {
-    if (!isStudent(actorId)) throw new ApiError('PERMISSION_DENIED');
-    let result: EventRegistration | undefined;
-    db.update((draft) => {
-      const event = draft.events.find((candidate) => candidate.id === eventId);
-      if (!event) throw new ApiError('RESOURCE_NOT_FOUND');
-      const existing = draft.registrations.find(
-        (registration) => registration.eventId === eventId && registration.studentId === actorId,
-      );
-      if (existing) {
-        result = existing;
-        return;
-      }
-      if (!event.registrationOpen) throw new ApiError('EVENT_REGISTRATION_CLOSED');
-      if (event.registrationDeadline && Date.parse(event.registrationDeadline) < Date.now())
-        throw new ApiError('EVENT_REGISTRATION_DEADLINE_PASSED');
-      if (
-        draft.registrations.filter((registration) => registration.eventId === eventId).length >=
-        event.maxTeams * (event.maxTeamSize ?? DEFAULT_MAX_TEAM_SIZE)
-      )
-        throw new ApiError('EVENT_REGISTRATION_LIMIT_REACHED');
-      result = {
-        id: createId('registration'),
-        eventId,
-        studentId: actorId,
-        createdAt: new Date().toISOString(),
-      };
-      draft.registrations.push(result);
-    });
-    return result!;
-  });
-}
-
-export function setEventRegistrationOpen(
-  actorId: string,
-  input: { eventId: string; open: boolean },
-) {
-  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
-  return respond(() => {
-    assertCreator(actorId);
-    db.update((draft) => {
-      const event = draft.events.find((candidate) => candidate.id === input.eventId);
-      if (!event) throw new ApiError('RESOURCE_NOT_FOUND');
-      if (!canManageEvent(actorId, event)) throw new ApiError('PERMISSION_DENIED');
-      if (actorId === PROFESSOR_ID && event.kind === 'official')
-        throw new ApiError('PERMISSION_DENIED');
-      if (
-        input.open &&
-        event.registrationDeadline &&
-        Date.parse(event.registrationDeadline) < Date.now()
-      )
-        throw new ApiError('EVENT_REGISTRATION_DEADLINE_PASSED');
-      event.registrationOpen = input.open;
-    });
-  });
-}
-
 /** Cronograma de partida de um evento novo: três etapas a partir de hoje. */
 function defaultSchedule(): EventTemplate['schedule'] {
   const due = (days: number) => new Date(Date.now() + days * DAY).toISOString();
@@ -874,23 +568,6 @@ function defaultSchedule(): EventTemplate['schedule'] {
     { deadline: due(56), name: 'Desenvolvimento' },
     { deadline: due(91), name: 'Versão final' },
   ];
-}
-
-/** Troca do template após a criação do evento (RF-TPL-002 E2). */
-export function changeEventTemplate(actorId: string, eventId: string) {
-  if (isBackendEnabled()) {
-    requireUuid(eventId, 'RESOURCE_NOT_FOUND');
-    return Promise.reject(new ApiError('TEMPLATE_ALREADY_FIXED'));
-  }
-  return respond(() => {
-    assertCreator(actorId);
-
-    if (db.read().events.some((event) => event.id === eventId)) {
-      throw new ApiError('TEMPLATE_ALREADY_FIXED');
-    }
-
-    throw new ApiError('RESOURCE_NOT_FOUND');
-  });
 }
 
 const ACTIVE_KEY = 'vinceart.article';

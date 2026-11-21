@@ -4,24 +4,12 @@ import { useCurrentUser } from '@features/admin';
 import { isBackendEnabled } from '@shared/api/client';
 
 import {
-  allowedScopes,
   canReadArticle,
-  changeEventTemplate,
   createArticle,
-  createEvent,
   createTeam,
   getArticleTemplate,
   listArticles,
   listEvents,
-  listEventRegistrations,
-  listTemplates,
-  listTemplateCourses,
-  saveTemplate,
-  registerForEvent,
-  setEventRegistrationOpen,
-  setTemplateActive,
-  type CreateEventInput,
-  type SaveTemplateInput,
 } from './registryApi';
 
 export function useArticleTemplate() {
@@ -61,33 +49,6 @@ export function useEventDirectory() {
   });
 }
 
-export function useTemplates() {
-  const user = useCurrentUser();
-
-  return useQuery({
-    queryFn: async () => ({
-      events: isBackendEnabled() ? [] : await listEvents(user.id),
-      scopes: isBackendEnabled() ? [] : allowedScopes(user.id),
-      templates:
-        isBackendEnabled() && !user.permissions?.includes('TEMPLATE:READ')
-          ? []
-          : await listTemplates(user.id, user.permissions),
-    }),
-    queryKey: ['registry', 'templates', user.id],
-    retry: false,
-  });
-}
-
-export function useTemplateCourses() {
-  const user = useCurrentUser();
-  return useQuery({
-    enabled: isBackendEnabled() && user.permissions?.includes('TEMPLATE:CREATE') === true,
-    queryFn: listTemplateCourses,
-    queryKey: ['registry', 'template-courses', user.id],
-    retry: false,
-  });
-}
-
 function useRegistryMutation<Input, Output>(
   mutationFn: (actorId: string, input: Input) => Promise<Output>,
 ) {
@@ -100,29 +61,6 @@ function useRegistryMutation<Input, Output>(
   });
 }
 
-export const useSaveTemplate = () => useRegistryMutation<SaveTemplateInput, void>(saveTemplate);
-
-export const useSetTemplateActive = () =>
-  useRegistryMutation<{ active: boolean; templateId: string }, void>(
-    (actorId, { active, templateId }) => setTemplateActive(actorId, templateId, active),
-  );
-
-export const useCreateEvent = () => useRegistryMutation<CreateEventInput, void>(createEvent);
-
-export const useChangeEventTemplate = () => useRegistryMutation<string, void>(changeEventTemplate);
-
 export const useCreateTeam = () => useRegistryMutation(createTeam);
 
 export const useCreateArticle = () => useRegistryMutation(createArticle);
-
-export function useEventRegistrations() {
-  const user = useCurrentUser();
-  return useQuery({
-    queryFn: () => (isBackendEnabled() ? Promise.resolve([]) : listEventRegistrations(user.id)),
-    queryKey: ['registry', 'registrations', user.id],
-  });
-}
-
-export const useRegisterForEvent = () => useRegistryMutation(registerForEvent);
-
-export const useSetEventRegistrationOpen = () => useRegistryMutation(setEventRegistrationOpen);

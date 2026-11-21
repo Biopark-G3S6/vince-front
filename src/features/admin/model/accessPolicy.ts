@@ -77,7 +77,6 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
     'teams',
     'articles',
     'editor',
-    'templates',
     'review',
     'discussion',
     'notifications',

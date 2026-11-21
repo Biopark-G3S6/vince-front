@@ -5,20 +5,18 @@ import { toast } from 'sonner';
 
 import { useCurrentUser } from '@features/admin';
 import {
-  useTemplateCourses,
-  useSaveTemplate,
   currentVersion,
   defaultFormat,
   fontOptions,
   sectionsContent,
-  type EventTemplate,
   type StoredTemplate,
   type TemplateFormat,
 } from '@features/articles';
-import { isBackendEnabled } from '@shared/api/client';
+import { useUserNames } from '@shared/api/directory';
 import { useFormatters } from '@shared/i18n';
 import { Button, Notice, UploadIcon } from '@shared/ui';
 
+import { useTemplateCourses, useTemplateMutations } from '../api/templateApi';
 import { createArticleExtensions } from '../model/extensions';
 
 import { EditorToolbar } from './EditorToolbar';
@@ -31,40 +29,35 @@ const fieldClass =
 const labelClass = 'flex min-w-0 flex-col gap-2 text-sm font-semibold text-vince-muted';
 
 type TemplateFormProps = {
-  events?: EventTemplate[];
   importMode?: boolean;
-  initialEventId?: string;
   onClose: () => void;
   onError: (error: unknown) => void;
   template: StoredTemplate | null;
 };
 
-/** A mesma composição de conteúdo e formatação serve para modelos pessoais e de eventos. */
+/**
+ * O template de artigo (RF-TPL-001): nome, descrição, escopo (instituição ou curso) e o
+ * conteúdo inicial composto no mesmo editor do artigo. Alterar gera versão nova (RN4).
+ */
 export function TemplateForm({
-  events = [],
   importMode = false,
-  initialEventId,
   onClose,
   onError,
   template,
 }: TemplateFormProps) {
   const user = useCurrentUser();
   const { formatDateTime } = useFormatters();
-  const saveTemplate = useSaveTemplate();
-  const coursesQuery = useTemplateCourses();
-  const backendMode = isBackendEnabled();
+  const saveTemplate = useTemplateMutations().save;
+  const institutionAdmin = user.roles.includes('institutionAdmin');
+  const coursesQuery = useTemplateCourses(true);
+  // RN2: o administrador escolhe qualquer curso da instituição; o coordenador, só os seus.
+  const courses = (coursesQuery.data ?? []).filter(
+    (course) => institutionAdmin || course.coordinatorId === user.id,
+  );
+  const authors = useUserNames(template?.versions.map((version) => version.createdBy) ?? []);
   const readOnly = template !== null && !template.canMaintain;
-  const relatedEventId =
-    template?.eventId ?? events.find((event) => event.templateId === template?.id)?.id;
   const [title, setTitle] = useState(template?.title ?? '');
   const [description, setDescription] = useState(template?.description ?? '');
-  const [visibility, setVisibility] = useState<'personal' | 'event'>(
-    template?.visibility === 'event' ||
-      (template !== null && template.visibility === undefined && Boolean(relatedEventId))
-      ? 'event'
-      : 'personal',
-  );
-  const [eventId, setEventId] = useState(relatedEventId ?? initialEventId ?? events[0]?.id ?? '');
   const [courseId, setCourseId] = useState(template?.courseId ?? '');
   const [format, setFormat] = useState<TemplateFormat>(
     template
@@ -92,9 +85,7 @@ export function TemplateForm({
     extensions,
   });
   const formatAsTemplate = { ...format, description, id: 'draft', label: title, title };
-  const canPublish = user.role !== 'student' && events.length > 0;
-  const selectedBackendCourseId =
-    courseId || (user.role === 'coordinator' ? (coursesQuery.data?.[0]?.id ?? '') : '');
+  const selectedCourseId = courseId || (institutionAdmin ? '' : (courses[0]?.id ?? ''));
 
   async function importFile(file: File) {
     if (!file.name.toLowerCase().endsWith('.docx')) {
@@ -139,21 +130,15 @@ export function TemplateForm({
       (importMode && !imported)
     )
       return;
-    const selectedEvent =
-      visibility === 'event' ? events.find((event) => event.id === eventId) : undefined;
-    if (visibility === 'event' && (!canPublish || !selectedEvent)) return;
-    if (backendMode && user.role === 'coordinator' && !selectedBackendCourseId) return;
+    if (!institutionAdmin && !selectedCourseId) return;
     saveTemplate.mutate(
       {
         content: editor.getJSON(),
-        courseId: backendMode ? selectedBackendCourseId || null : (selectedEvent?.courseId ?? null),
+        courseId: selectedCourseId || null,
         description: description.trim(),
-        eventId: visibility === 'event' ? eventId : undefined,
         format,
         id: template?.id,
-        ownerId: user.id,
         title: title.trim(),
-        visibility,
       },
       {
         onError,
@@ -161,9 +146,9 @@ export function TemplateForm({
           toast.success(
             template
               ? 'Modelo atualizado com uma nova versão.'
-              : visibility === 'event'
-                ? 'Modelo publicado no evento.'
-                : 'Modelo salvo em Meus modelos.',
+              : selectedCourseId
+                ? 'Modelo salvo para o curso.'
+                : 'Modelo salvo para a instituição.',
           );
           onClose();
         },
@@ -193,10 +178,9 @@ export function TemplateForm({
             : 'Criar modelo'}
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-vince-muted">
-        Salve um documento inicial para reutilizar em novos artigos.{' '}
-        {canPublish
-          ? 'Você pode guardar o modelo como pessoal ou disponibilizá-lo aos participantes de um evento.'
-          : 'O modelo ficará disponível na sua biblioteca pessoal.'}
+        O modelo é o ponto de partida dos artigos: quem cria um evento o escolhe, e cada artigo do
+        evento nasce com a versão escolhida. Alterar o modelo gera uma versão nova, sem afetar os
+        eventos que já o adotaram.
       </p>
 
       {importMode && (
@@ -250,63 +234,24 @@ export function TemplateForm({
           />
         </label>
         <label className={labelClass}>
-          {backendMode ? 'Escopo do modelo' : 'Disponibilidade'}
-          {backendMode ? (
-            <select
-              className={fieldClass}
-              onChange={(event) => setCourseId(event.target.value)}
-              value={selectedBackendCourseId}
-            >
-              {user.role === 'institutionAdmin' && <option value="">Toda a instituição</option>}
-              {(coursesQuery.data ?? []).map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <select
-              className={fieldClass}
-              onChange={(event) => setVisibility(event.target.value as 'personal' | 'event')}
-              value={visibility}
-            >
-              <option value="personal">Meus modelos (pessoal)</option>
-              {canPublish && <option value="event">Modelo do evento</option>}
-            </select>
-          )}
-        </label>
-        {backendMode && user.role === 'coordinator' && coursesQuery.isError && (
-          <Notice className="md:col-span-2" tone="danger">
-            Não foi possível carregar os cursos que você coordena.
-          </Notice>
-        )}
-        {!backendMode && visibility === 'event' && (
-          <label className={`${labelClass} md:col-span-2`}>
-            Evento
-            <select
-              className={fieldClass}
-              onChange={(event) => setEventId(event.target.value)}
-              required
-              value={eventId}
-            >
-              <option value="" disabled>
-                Selecione o evento
+          Escopo do modelo
+          <select
+            className={fieldClass}
+            onChange={(event) => setCourseId(event.target.value)}
+            value={selectedCourseId}
+          >
+            {institutionAdmin && <option value="">Toda a instituição</option>}
+            {courses.map((course) => (
+              <option key={course.id} value={course.id}>
+                {course.name}
               </option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                  {event.kind === 'practice'
-                    ? ' (teste)'
-                    : event.kind === 'tcc'
-                      ? ' (TCC)'
-                      : ' (oficial)'}
-                </option>
-              ))}
-            </select>
-            <span className="font-normal">
-              Os participantes do evento poderão escolher este modelo ao criar um artigo.
-            </span>
-          </label>
+            ))}
+          </select>
+        </label>
+        {coursesQuery.isError && (
+          <Notice className="md:col-span-2" tone="danger">
+            Não foi possível carregar os cursos.
+          </Notice>
         )}
         <label className={`${labelClass} md:col-span-2`}>
           Descrição
@@ -423,7 +368,8 @@ export function TemplateForm({
           <ol className="mt-2 space-y-2 text-sm text-vince-muted">
             {[...template.versions].reverse().map((version) => (
               <li key={version.number}>
-                Versão {version.number} — {version.createdBy}, {formatDateTime(version.createdAt)}
+                Versão {version.number} — {authors.nameOf(version.createdBy, 'autor desconhecido')},{' '}
+                {formatDateTime(version.createdAt)}
               </li>
             ))}
           </ol>
@@ -436,11 +382,7 @@ export function TemplateForm({
         {!readOnly && (
           <Button
             disabled={
-              saveTemplate.isPending ||
-              converting ||
-              !title.trim() ||
-              (importMode && !imported) ||
-              (visibility === 'event' && !eventId)
+              saveTemplate.isPending || converting || !title.trim() || (importMode && !imported)
             }
             type="submit"
           >

@@ -3,22 +3,14 @@ export {
   articleHref,
   cacheBackendArticle,
   canReadArticle,
-  changeEventTemplate,
   createArticle,
   createEvent,
   createTeam,
   currentArticle,
   getArticleTemplate,
   listArticles,
-  listEventRegistrations,
   listEvents,
-  listTemplates,
-  listTemplateCourses,
   readArticles,
-  registerForEvent,
-  saveTemplate,
-  setTemplateActive,
-  setEventRegistrationOpen,
   type CreateArticleInput,
   type CreateEventInput,
   type CreateTeamInput,
@@ -26,21 +18,7 @@ export {
   type EventRegistration,
   type SaveTemplateInput,
 } from './api/registryApi';
-export {
-  useArticleTemplate,
-  useArticles,
-  useChangeEventTemplate,
-  useCreateArticle,
-  useCreateEvent,
-  useEventDirectory,
-  useEventRegistrations,
-  useRegisterForEvent,
-  useSetEventRegistrationOpen,
-  useSaveTemplate,
-  useSetTemplateActive,
-  useTemplates,
-  useTemplateCourses,
-} from './api/hooks';
+export { useArticleTemplate, useArticles, useCreateArticle, useEventDirectory } from './api/hooks';
 export { CreateTeamDialog } from './components/CreateTeamDialog';
 export { EventDirectory } from './components/EventDirectory';
 export {

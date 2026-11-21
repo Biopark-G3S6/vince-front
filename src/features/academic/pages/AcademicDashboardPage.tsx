@@ -8,13 +8,10 @@ import {
 } from '@shared/ui';
 
 import { useCurrentUser } from '@features/admin';
-import {
-  courseName,
-  useArticles,
-  useEventDirectory,
-  useEventRegistrations,
-} from '@features/articles';
+import { courseName, useArticles, useEventDirectory } from '@features/articles';
 import { ArticleList } from '@features/review';
+
+import { useEvents } from '../api/eventApi';
 
 import { dashboardActivities } from '../model/academic';
 import { useAcademicData } from '../api/academicStore';
@@ -29,7 +26,8 @@ export function AcademicDashboardPage() {
   const currentUser = useCurrentUser();
   const { data: workspaceArticles = [] } = useArticles();
   const { data: eventDirectory } = useEventDirectory();
-  const { data: registrations = [] } = useEventRegistrations();
+  // Não há inscrição em evento (RF-EVT-001 RN2): o aluno vê os eventos que o alcançam.
+  const { data: reachableEvents = [] } = useEvents();
   const events = eventDirectory?.events ?? [];
   const {
     data: { articles, classGroups, courses, teams },
@@ -128,10 +126,10 @@ export function AcademicDashboardPage() {
           />
           <MetricCard
             icon={<UsersIcon className="h-5 w-5" />}
-            label={isStudent ? 'Minhas inscrições' : 'Eventos independentes'}
+            label={isStudent ? 'Meus eventos' : 'Eventos independentes'}
             value={String(
               isStudent
-                ? registrations.length
+                ? reachableEvents.length
                 : events.filter(
                     (event) => event.kind !== 'official' && event.createdById === currentUser.id,
                   ).length,
