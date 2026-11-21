@@ -23,25 +23,39 @@ export type PublicationDto = {
   url: string;
 };
 
-export function useArticles() {
+export type ArticleFilters = { eventId?: string; status?: ArticleSummaryDto['status'] };
+
+/** Os artigos que o ator alcança, com os filtros de `GET /articles` (RF-ART-001). */
+export function useArticles(filters: ArticleFilters = {}) {
   return useQuery({
-    queryKey: ['articles', 'all'],
-    queryFn: () => http.all<ArticleSummaryDto>('/articles'),
+    queryKey: ['articles', 'list', filters],
+    queryFn: () =>
+      http.all<ArticleSummaryDto>('/articles', {
+        eventId: filters.eventId || undefined,
+        status: filters.status || undefined,
+      }),
   });
 }
 
-/** O nome de cada equipe, uma listagem por evento dos artigos visíveis. */
-export function useTeamNames(eventIds: string[]) {
-  const unique = [...new Set(eventIds)];
+/**
+ * O nome de cada equipe. O artigo já o traz (`article-team-name`); só o artigo anterior à
+ * sincronização do nome consulta a equipe por identificador.
+ */
+export function useTeamNames(articles: ArticleSummaryDto[]) {
+  const missing = [
+    ...new Set(articles.filter((item) => !item.teamIdentification).map((item) => item.teamId)),
+  ];
   const results = useQueries({
-    queries: unique.map((eventId) => ({
-      queryKey: ['teams', eventId],
-      queryFn: () => http.all<TeamDto>(`/events/${eventId}/teams`),
+    queries: missing.map((teamId) => ({
+      queryKey: ['team', teamId],
+      queryFn: () => http.get<TeamDto>(`/teams/${teamId}`),
     })),
   });
   const names = new Map<string, string>();
+  for (const article of articles)
+    if (article.teamIdentification) names.set(article.teamId, article.teamIdentification);
   for (const result of results)
-    for (const team of result.data ?? []) names.set(team.id, team.identification);
+    if (result.data) names.set(result.data.id, result.data.identification);
   return names;
 }
 
@@ -111,6 +125,16 @@ export function useArticleMutations() {
     publish: useMutation({
       mutationFn: ({ articleId, ...body }: Omit<PublicationDto, 'id'>) =>
         http.post<PublicationDto>(`/articles/${articleId}/publications`, body),
+      onSuccess: (_result, { articleId }) => refresh(articleId),
+    }),
+    /** RF-ART-004: consulta, altera ou remove. */
+    updatePublication: useMutation({
+      mutationFn: ({
+        articleId,
+        publicationId,
+        ...body
+      }: Omit<PublicationDto, 'id'> & { publicationId: string }) =>
+        http.patch<PublicationDto>(`/articles/${articleId}/publications/${publicationId}`, body),
       onSuccess: (_result, { articleId }) => refresh(articleId),
     }),
     unpublish: useMutation({

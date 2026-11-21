@@ -3,7 +3,15 @@ import { toast } from 'sonner';
 
 import { hasPermission, useCurrentUser } from '@features/admin';
 import { useUserNames } from '@shared/api/directory';
-import { Button, CheckCircleIcon, DocumentIcon, EditIcon, EmptyState, PlusIcon } from '@shared/ui';
+import {
+  Button,
+  CheckCircleIcon,
+  ConfirmDialog,
+  DocumentIcon,
+  EditIcon,
+  EmptyState,
+  PlusIcon,
+} from '@shared/ui';
 
 import {
   useArticleMutations,
@@ -11,8 +19,11 @@ import {
   useAssessments,
   usePublications,
   useTeamNames,
+  type AssessmentDto,
+  type PublicationDto,
 } from '../api/articleApi';
 import { describeAcademicError } from '../api/courseApi';
+import { useEventDetails, useEvents } from '../api/eventApi';
 import type { ArticleSummaryDto } from '../api/teamApi';
 import { academicFieldClass } from '../components/AcademicActionDialog';
 import {
@@ -66,9 +77,15 @@ const formatDay = (iso: string) =>
 /** RF-ART-001 a RF-ART-004: situação, avaliação, notas individuais e publicação externa. */
 export function ArticlesPage() {
   const user = useCurrentUser();
-  const articlesQuery = useArticles();
+  const [eventFilter, setEventFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | Status>('');
+  const articlesQuery = useArticles({
+    eventId: eventFilter || undefined,
+    status: statusFilter || undefined,
+  });
   const articles = useMemo(() => articlesQuery.data ?? [], [articlesQuery.data]);
-  const teamNames = useTeamNames(articles.map((article) => article.eventId));
+  const teamNames = useTeamNames(articles);
+  const events = useEvents().data ?? [];
   const [selectedArticleId, setSelectedArticleId] = useState('');
   const selected = articles.find((article) => article.id === selectedArticleId) ?? articles[0];
 
@@ -104,6 +121,38 @@ export function ArticlesPage() {
 
       <section className="mt-8 grid min-w-0 gap-8 2xl:grid-cols-[320px_minmax(0,1fr)]">
         <SectionPanel title="Lista de artigos">
+          <div className="mb-4 grid gap-3">
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-vince-muted">Evento</span>
+              <select
+                className={academicFieldClass}
+                onChange={(change) => setEventFilter(change.target.value)}
+                value={eventFilter}
+              >
+                <option value="">Todos os eventos</option>
+                {events.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-vince-muted">Situação</span>
+              <select
+                className={academicFieldClass}
+                onChange={(change) => setStatusFilter(change.target.value as '' | Status)}
+                value={statusFilter}
+              >
+                <option value="">Todas as situações</option>
+                {pipeline.map((step) => (
+                  <option key={step} value={step}>
+                    {statusView[step].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="space-y-3">
             {articles.map((article) => (
               <button
@@ -159,15 +208,29 @@ function ArticleWorkspace({ article, teamName }: { article: ArticleSummaryDto; t
   const isMember = article.memberIds.includes(user.id);
   const assessments = useAssessments(article.id, isResponsible);
   const publications = usePublications(article.id, can('PUBLICATION:READ'));
-  const names = useUserNames([...article.memberIds, article.advisorId]);
+  // Mantém a publicação quem integra a equipe, o responsável e os orientadores do evento.
+  const eventAdvisors = useEventDetails(article.eventId).advisors.data ?? [];
+  const keepsPublications =
+    isMember || isResponsible || eventAdvisors.some((item) => item.userId === user.id);
+  const history = assessments.data ?? [];
+  const names = useUserNames([
+    ...article.memberIds,
+    article.advisorId,
+    ...history.map((item) => item.evaluatedBy),
+    ...history.map((item) => item.memberId),
+  ]);
   const mutations = useArticleMutations();
   const [title, setTitle] = useState(article.title ?? '');
+  const [editingPublicationId, setEditingPublicationId] = useState('');
+  const [removing, setRemoving] = useState<PublicationDto | null>(null);
 
-  const history = assessments.data ?? [];
   const articleGrades = history.filter((item) => item.memberId === null);
   const latestGrade = articleGrades[0];
   const latestMemberGrade = (memberId: string) =>
     history.find((item) => item.memberId === memberId);
+  const memberGrades = history.filter((item) => item.memberId !== null);
+  const describeGrade = (grade: AssessmentDto) =>
+    `${grade.score.toLocaleString('pt-BR')} em ${formatDate(grade.createdAt)}, por ${names.nameOf(grade.evaluatedBy)}`;
 
   async function run(task: () => Promise<unknown>, success: string) {
     try {
@@ -234,6 +297,31 @@ function ArticleWorkspace({ article, teamName }: { article: ArticleSummaryDto; t
       'Publicação registrada.',
     );
     if (done) formElement.reset();
+  }
+
+  async function updatePublication(event: FormEvent<HTMLFormElement>, publicationId: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const url = String(form.get('url') ?? '').trim();
+    if (!/^https?:\/\//.test(url)) {
+      toast.error('Informe uma URL com http ou https.');
+      return;
+    }
+    const done = await run(
+      () =>
+        mutations.updatePublication.mutateAsync({
+          articleId: article.id,
+          publicationId,
+          venueName: String(form.get('venueName') ?? '').trim(),
+          kind: String(form.get('kind')) as 'CONFERENCE' | 'JOURNAL' | 'OTHER',
+          publicationDate: new Date(
+            `${String(form.get('publicationDate'))}T12:00:00Z`,
+          ).toISOString(),
+          url,
+        }),
+      'Publicação atualizada.',
+    );
+    if (done) setEditingPublicationId('');
   }
 
   const currentStep = pipeline.indexOf(article.status);
@@ -374,8 +462,23 @@ function ArticleWorkspace({ article, teamName }: { article: ArticleSummaryDto; t
               <ul className="space-y-1 text-sm text-vince-muted">
                 {articleGrades.map((grade) => (
                   <li key={grade.id}>
-                    {grade.score.toLocaleString('pt-BR')} em {formatDate(grade.createdAt)}
+                    {describeGrade(grade)}
                     {grade.feedback ? ` — "${grade.feedback}"` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {memberGrades.length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 font-extrabold text-vince-text">
+                Histórico das notas individuais
+              </h3>
+              <ul className="space-y-1 text-sm text-vince-muted">
+                {memberGrades.map((grade) => (
+                  <li key={grade.id}>
+                    {names.nameOf(grade.memberId)}: {describeGrade(grade)}
                   </li>
                 ))}
               </ul>
@@ -387,79 +490,81 @@ function ArticleWorkspace({ article, teamName }: { article: ArticleSummaryDto; t
       {can('PUBLICATION:READ') && (
         <SectionPanel title="Publicação externa">
           <ul className="space-y-3">
-            {(publications.data ?? []).map((publication) => (
-              <li
-                className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-vince-border p-4"
-                key={publication.id}
-              >
-                <div>
-                  <p className="font-bold text-vince-text">{publication.venueName}</p>
-                  <p className="text-sm text-vince-muted">
-                    {kindLabel[publication.kind]} · {formatDay(publication.publicationDate)}
-                  </p>
-                  <a
-                    className="break-all text-sm text-vince-primary underline"
-                    href={publication.url}
+            {(publications.data ?? []).map((publication) =>
+              editingPublicationId === publication.id ? (
+                <li className="rounded-lg border border-vince-primary p-4" key={publication.id}>
+                  <form
+                    className="grid gap-4 sm:grid-cols-2"
+                    onSubmit={(event) => void updatePublication(event, publication.id)}
                   >
-                    {publication.url}
-                  </a>
-                </div>
-                {can('PUBLICATION:DELETE') && (
-                  <Button
-                    aria-label={`Remover publicação ${publication.venueName}`}
-                    onClick={() =>
-                      void run(
-                        () =>
-                          mutations.unpublish.mutateAsync({
-                            articleId: article.id,
-                            publicationId: publication.id,
-                          }),
-                        'Publicação removida.',
-                      )
-                    }
-                    size="sm"
-                    variant="outline"
-                  >
-                    Remover
-                  </Button>
-                )}
-              </li>
-            ))}
+                    <PublicationFields publication={publication} />
+                    <div className="flex gap-3 sm:col-span-2">
+                      <Button type="submit">Salvar alterações</Button>
+                      <Button
+                        onClick={() => setEditingPublicationId('')}
+                        type="button"
+                        variant="outline"
+                      >
+                        Cancelar edição
+                      </Button>
+                    </div>
+                  </form>
+                </li>
+              ) : (
+                <li
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-vince-border p-4"
+                  key={publication.id}
+                >
+                  <div>
+                    <p className="font-bold text-vince-text">{publication.venueName}</p>
+                    <p className="text-sm text-vince-muted">
+                      {kindLabel[publication.kind]} · {formatDay(publication.publicationDate)}
+                    </p>
+                    <a
+                      className="break-all text-sm text-vince-primary underline"
+                      href={publication.url}
+                    >
+                      {publication.url}
+                    </a>
+                  </div>
+                  {keepsPublications && (
+                    <span className="flex gap-2">
+                      {can('PUBLICATION:UPDATE') && (
+                        <Button
+                          aria-label={`Editar publicação ${publication.venueName}`}
+                          onClick={() => setEditingPublicationId(publication.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Editar
+                        </Button>
+                      )}
+                      {can('PUBLICATION:DELETE') && (
+                        <Button
+                          aria-label={`Remover publicação ${publication.venueName}`}
+                          onClick={() => setRemoving(publication)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Remover
+                        </Button>
+                      )}
+                    </span>
+                  )}
+                </li>
+              ),
+            )}
             {publications.data?.length === 0 && (
               <p className="text-sm text-vince-muted">Nenhuma publicação registrada.</p>
             )}
           </ul>
 
-          {can('PUBLICATION:CREATE') && (
+          {can('PUBLICATION:CREATE') && keepsPublications && (
             <form
               className="mt-6 grid gap-4 sm:grid-cols-2"
               onSubmit={(event) => void publish(event)}
             >
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-vince-muted">Veículo</span>
-                <input
-                  className={academicFieldClass}
-                  id="publication-vehicle"
-                  name="venueName"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-vince-muted">Tipo</span>
-                <select className={academicFieldClass} name="kind">
-                  <option value="CONFERENCE">Evento científico</option>
-                  <option value="JOURNAL">Periódico</option>
-                  <option value="OTHER">Outro</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-vince-muted">Data</span>
-                <input className={academicFieldClass} name="publicationDate" required type="date" />
-              </label>
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-vince-muted">URL</span>
-                <input className={academicFieldClass} name="url" required type="url" />
-              </label>
+              <PublicationFields />
               <div className="sm:col-span-2">
                 <Button type="submit">Salvar publicação</Button>
               </div>
@@ -467,6 +572,75 @@ function ArticleWorkspace({ article, teamName }: { article: ArticleSummaryDto; t
           )}
         </SectionPanel>
       )}
+      <ConfirmDialog
+        cancelLabel="Voltar"
+        confirmLabel="Remover publicação"
+        description={`O registro de ${removing?.venueName ?? ''} deixa de constar no artigo e no relatório do curso.`}
+        onConfirm={() => {
+          const target = removing;
+          setRemoving(null);
+          if (target) {
+            void run(
+              () =>
+                mutations.unpublish.mutateAsync({
+                  articleId: article.id,
+                  publicationId: target.id,
+                }),
+              'Publicação removida.',
+            );
+          }
+        }}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null);
+        }}
+        open={removing !== null}
+        title="Remover publicação?"
+      />
     </div>
+  );
+}
+
+/** Os campos do registro de publicação, na criação e na edição (RF-ART-004). */
+function PublicationFields({ publication }: { publication?: PublicationDto }) {
+  return (
+    <>
+      <label className="block">
+        <span className="mb-2 block text-sm font-semibold text-vince-muted">Veículo</span>
+        <input
+          className={academicFieldClass}
+          defaultValue={publication?.venueName}
+          name="venueName"
+          required
+        />
+      </label>
+      <label className="block">
+        <span className="mb-2 block text-sm font-semibold text-vince-muted">Tipo</span>
+        <select className={academicFieldClass} defaultValue={publication?.kind} name="kind">
+          <option value="CONFERENCE">Evento científico</option>
+          <option value="JOURNAL">Periódico</option>
+          <option value="OTHER">Outro</option>
+        </select>
+      </label>
+      <label className="block">
+        <span className="mb-2 block text-sm font-semibold text-vince-muted">Data</span>
+        <input
+          className={academicFieldClass}
+          defaultValue={publication?.publicationDate.slice(0, 10)}
+          name="publicationDate"
+          required
+          type="date"
+        />
+      </label>
+      <label className="block">
+        <span className="mb-2 block text-sm font-semibold text-vince-muted">URL</span>
+        <input
+          className={academicFieldClass}
+          defaultValue={publication?.url}
+          name="url"
+          required
+          type="url"
+        />
+      </label>
+    </>
   );
 }

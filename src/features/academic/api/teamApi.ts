@@ -38,6 +38,8 @@ export type ArticleSummaryDto = {
   id: string;
   eventId: string;
   teamId: string;
+  /** O nome da equipe (`article-team-name`); `null` em artigo ainda não ressincronizado. */
+  teamIdentification: string | null;
   courseId: string | null;
   advisorId: string | null;
   memberIds: string[];

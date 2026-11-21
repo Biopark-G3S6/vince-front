@@ -94,10 +94,33 @@ test('ART-002/003/004: o orientador responsável avalia, dá notas e registra pu
   await expect(page.getByLabel(`Nota de ${caio!.name}`)).toHaveValue('8.5');
   await expect(page.getByText('Anais do Congresso Interno')).toBeVisible();
   await expect(page.getByText(/Evento científico · 21 de out\. de 2026/)).toBeVisible();
-  await expect(page.getByText(/9,1 em .* — "Boa fundamentação teórica."/)).toBeVisible();
+  // Histórico com autor e instante (RF-ART-002 RN3, RF-ART-003 RN3).
+  await expect(
+    page.getByText(
+      new RegExp(`9,1 em .*, por ${scenario.professor.name} — "Boa fundamentação teórica."`),
+    ),
+  ).toBeVisible();
+  await expect(page.getByText('Histórico das notas individuais')).toBeVisible();
+  await expect(
+    page.getByText(new RegExp(`${caio!.name}: 8,5 em .*, por ${scenario.professor.name}`)),
+  ).toBeVisible();
   await shot(page, 'art-02-avaliacao');
 
-  await page.getByRole('button', { name: 'Remover publicação Anais do Congresso Interno' }).click();
+  // Alteração do registro (RF-ART-004: consulta, altera ou remove).
+  await page.getByRole('button', { name: 'Editar publicação Anais do Congresso Interno' }).click();
+  const editing = page.locator('li').filter({
+    has: page.getByRole('button', { name: 'Salvar alterações' }),
+  });
+  await editing.getByLabel('Veículo').fill('Anais revisados');
+  await editing.getByLabel('Data', { exact: true }).fill('2026-11-02');
+  await editing.getByRole('button', { name: 'Salvar alterações' }).click();
+  await expect(page.getByText('Publicação atualizada.')).toBeVisible();
+  await expect(page.getByText(/Evento científico · 2 de nov\. de 2026/)).toBeVisible();
+
+  // A remoção pede confirmação.
+  await page.getByRole('button', { name: 'Remover publicação Anais revisados' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Remover publicação?' });
+  await confirm.getByRole('button', { name: 'Remover publicação' }).click();
   await expect(page.getByText('Publicação removida.')).toBeVisible();
   await expect(page.getByText('Nenhuma publicação registrada.')).toBeVisible();
 });
@@ -109,6 +132,33 @@ test('ART-001: o coordenador acompanha sem avaliar', async ({ page }) => {
     page.getByRole('heading', { name: `${articleTitle} no Paraná` }).first(),
   ).toBeVisible();
   await expect(page.getByText('Avaliação do orientador')).toHaveCount(0);
+  // O coordenador consulta as publicações do artigo do curso (publication-actors).
+  await expect(page.getByText('Publicação externa')).toBeVisible();
+  await expect(page.getByText('Nenhuma publicação registrada.')).toBeVisible();
+
+  // Filtros da lista (RF-ART-001).
+  await page.getByRole('combobox', { name: 'Situação' }).selectOption('FINISHED');
+  await expect(page.getByText('Nenhum artigo')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Situação' }).selectOption('');
+  await expect(
+    page.getByRole('heading', { name: `${articleTitle} no Paraná` }).first(),
+  ).toBeVisible();
+});
+
+test('ART-001: o nome da equipe vem no artigo, sem uma consulta por evento', async ({ page }) => {
+  const teamListings: string[] = [];
+  page.on('request', (request) => {
+    if (/\/events\/[^/]+\/teams$/.test(new URL(request.url()).pathname)) {
+      teamListings.push(request.url());
+    }
+  });
+  await login(page, scenario.professor.email, PASSWORD);
+  await page.goto('/admin/artigos');
+  await expect(
+    page.getByRole('heading', { name: `${articleTitle} no Paraná` }).first(),
+  ).toBeVisible();
+  await expect(page.getByText('Equipe Saúde').first()).toBeVisible();
+  expect(teamListings).toEqual([]);
 });
 
 test('ART-001: professor sem vínculo com o evento não vê o artigo', async ({ page }) => {
