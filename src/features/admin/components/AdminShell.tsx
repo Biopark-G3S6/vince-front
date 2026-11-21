@@ -72,7 +72,7 @@ export function AdminShell({ activeSection, children }: AdminShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState('');
   const menuToggleLabel = collapsed ? t('shell.expandMenu') : t('shell.collapseMenu');
-  const visibleItems = navItems.filter((item) => canAccessSection(currentUser.role, item.section));
+  const visibleItems = navItems.filter((item) => canAccessSection(currentUser, item.section));
   const itemLabel = (section: AdminSection) =>
     t(`roleNav.${currentUser.role}.${section}`, { defaultValue: t(`nav.${section}`) });
   const matchingItems = visibleItems.filter((item) =>

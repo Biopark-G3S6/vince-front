@@ -13,6 +13,7 @@ type TabKey = 'teams' | 'course' | 'contribution' | 'report';
 
 /** O que cada perfil alcança compõe a tela; quem autoriza é o backend (ADR-0015 §19). */
 const tabsByRole: Record<Role, TabKey[]> = {
+  systemAdmin: [],
   advisor: ['teams', 'contribution'],
   coordinator: ['course', 'report'],
   institutionAdmin: ['report'],

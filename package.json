@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:integration": "playwright test -c playwright.integration.config.ts",
     "api:types": "openapi-typescript $API_SPEC_URL -o src/shared/api/schema.ts",
     "api:check": "pnpm run api:types && git diff --exit-code src/shared/api/schema.ts",
     "docs:update": "git submodule update --remote docs",

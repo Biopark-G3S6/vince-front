@@ -15,6 +15,7 @@ type TabKey = 'summary' | 'compliance' | 'similarity' | 'authorship' | 'consent'
 
 /** O que cada perfil alcança compõe a tela; quem autoriza é o backend (ADR-0015 §19). */
 const tabsByRole: Record<Role, TabKey[]> = {
+  systemAdmin: [],
   advisor: ['summary', 'compliance', 'similarity', 'authorship', 'consent'],
   coordinator: [],
   institutionAdmin: ['consent'],

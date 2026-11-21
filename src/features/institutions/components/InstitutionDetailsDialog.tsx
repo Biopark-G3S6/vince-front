@@ -6,17 +6,45 @@ import { toast } from 'sonner';
 import { Button, ConfirmDialog, TrashIcon } from '@shared/ui';
 
 import {
-  makeInitials,
+  useInstitutionAdmins,
+  useInstitutionInvitations,
+  useInstitutionMutations,
+  type InstitutionInput,
+} from '../api/institutionApi';
+import { describeInstitutionError } from '../model/errors';
+import {
   validateInstitution,
   type Institution,
-  type InstitutionAdmin,
+  type InstitutionInvitation,
 } from '../model/institution';
+
+const invitationState: Record<
+  InstitutionInvitation['state'],
+  { label: string; className: string }
+> = {
+  ACTIVE: { label: 'Pendente', className: 'bg-amber-50 text-amber-900 border-amber-200' },
+  EXHAUSTED: { label: 'Aceito', className: 'bg-green-50 text-green-800 border-green-200' },
+  EXPIRED: { label: 'Expirado', className: 'bg-[#f8eeee] text-vince-muted border-vince-border' },
+  REVOKED: { label: 'Revogado', className: 'bg-[#f8eeee] text-vince-muted border-vince-border' },
+};
+
+const roleLabel: Record<string, string> = {
+  INSTITUTION_ADMIN: 'Administrador institucional',
+  COORDINATOR: 'Coordenador',
+  PROFESSOR: 'Professor',
+};
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(value),
+  );
+}
 
 type InstitutionDetailsDialogProps = {
   institution: Institution | null;
   onClose: () => void;
   onDeactivate: (institutionId: string) => void;
-  onUpdate: (institution: Institution) => void;
+  onUpdate: (institutionId: string, input: InstitutionInput) => void;
 };
 
 type InstitutionForm = Pick<
@@ -43,8 +71,12 @@ export function InstitutionDetailsDialog({
   const titleId = useId();
   const descriptionId = useId();
   const [form, setForm] = useState<InstitutionForm>(emptyForm);
-  const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  const [invitationUrl, setInvitationUrl] = useState('');
+  const [validDays, setValidDays] = useState(7);
+  const admins = useInstitutionAdmins(institution?.id ?? null).data ?? [];
+  const invitations = useInstitutionInvitations(institution?.id ?? null);
+  const mutations = useInstitutionMutations();
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const loadedInstitutionId = useRef<string | null>(null);
 
@@ -65,8 +97,8 @@ export function InstitutionDetailsDialog({
       city: institution.city,
       state: institution.state,
     });
-    setAdminName('');
     setAdminEmail('');
+    setInvitationUrl('');
     setConfirmDeactivate(false);
   }, [institution]);
 
@@ -89,55 +121,63 @@ export function InstitutionDetailsDialog({
       return;
     }
 
-    onUpdate({
-      ...currentInstitution,
-      name: form.name.trim(),
-      acronym: form.acronym.trim().toUpperCase(),
-      legalId: form.legalId.trim(),
-      domain: form.domain.trim().toLowerCase(),
-      supportEmail: form.supportEmail.trim().toLowerCase(),
-      city: form.city.trim(),
-      state: form.state.trim().toUpperCase(),
-    });
-    toast.success('Dados da instituição atualizados.');
+    onUpdate(currentInstitution.id, form);
   }
 
-  function assignAdmin(event: FormEvent<HTMLFormElement>) {
+  async function assignAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!adminEmail.trim()) return;
 
-    if (!adminName.trim() || !adminEmail.trim()) {
-      toast.error('Informe o nome e o e-mail do administrador.');
-      return;
+    try {
+      const result = await mutations.assignAdmin.mutateAsync({
+        institutionId: currentInstitution.id,
+        email: adminEmail,
+        validDays,
+      });
+      setAdminEmail('');
+      if (result.kind === 'invited') {
+        setInvitationUrl(`${window.location.origin}${result.url}`);
+        toast.success('Sem conta na instituição: convite de administrador emitido.');
+      } else {
+        setInvitationUrl('');
+        toast.success('Administrador designado.');
+      }
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
     }
-
-    const email = adminEmail.trim().toLowerCase();
-    const exists = currentInstitution.admins.some((admin) => admin.email.toLowerCase() === email);
-
-    if (exists) {
-      toast.error('Este administrador já está vinculado à instituição.');
-      return;
-    }
-
-    const newAdmin: InstitutionAdmin = {
-      id: crypto.randomUUID(),
-      initials: makeInitials(adminName),
-      name: adminName.trim(),
-      email,
-      tone: 'primary',
-    };
-
-    onUpdate({ ...currentInstitution, admins: [...currentInstitution.admins, newAdmin] });
-    setAdminName('');
-    setAdminEmail('');
-    toast.success('Administrador designado.');
   }
 
-  function revokeAdmin(adminId: string) {
-    onUpdate({
-      ...currentInstitution,
-      admins: currentInstitution.admins.filter((admin) => admin.id !== adminId),
-    });
-    toast.success('Vínculo do administrador revogado.');
+  async function copyInvitation() {
+    try {
+      await navigator.clipboard.writeText(invitationUrl);
+      toast.success('Link copiado.');
+    } catch {
+      toast.error('Não foi possível copiar; selecione o link e copie manualmente.');
+    }
+  }
+
+  async function revokeInvitation(invitationId: string) {
+    try {
+      await mutations.revokeInvitation.mutateAsync({
+        institutionId: currentInstitution.id,
+        invitationId,
+      });
+      toast.success('Convite revogado.');
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+    }
+  }
+
+  async function revokeAdmin(adminId: string) {
+    try {
+      await mutations.revokeAdmin.mutateAsync({
+        institutionId: currentInstitution.id,
+        userId: adminId,
+      });
+      toast.success('Vínculo do administrador revogado.');
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+    }
   }
 
   const inactive = currentInstitution.status === 'inactive';
@@ -179,12 +219,9 @@ export function InstitutionDetailsDialog({
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <SummaryMetric label="Cursos ativos" value={String(currentInstitution.coursesActive)} />
-            <SummaryMetric
-              label="Administradores"
-              value={String(currentInstitution.admins.length)}
-            />
-            <SummaryMetric label="Domínio" value={currentInstitution.domain} />
+            <SummaryMetric label="Sigla" value={currentInstitution.acronym} />
+            <SummaryMetric label="Administradores" value={String(admins.length)} />
+            <SummaryMetric label="Domínio" value={currentInstitution.domain || '—'} />
           </div>
 
           <form
@@ -201,7 +238,7 @@ export function InstitutionDetailsDialog({
               />
               <Field
                 label="Sigla"
-                maxLength={8}
+                maxLength={20}
                 onChange={(value) => updateForm('acronym', value)}
                 required
                 value={form.acronym}
@@ -211,13 +248,11 @@ export function InstitutionDetailsDialog({
               <Field
                 label="CNPJ / identificador"
                 onChange={(value) => updateForm('legalId', value)}
-                required
                 value={form.legalId}
               />
               <Field
                 label="E-mail de suporte"
                 onChange={(value) => updateForm('supportEmail', value)}
-                required
                 type="email"
                 value={form.supportEmail}
               />
@@ -226,20 +261,17 @@ export function InstitutionDetailsDialog({
               <Field
                 label="Domínio"
                 onChange={(value) => updateForm('domain', value)}
-                required
                 value={form.domain}
               />
               <Field
                 label="Cidade"
                 onChange={(value) => updateForm('city', value)}
-                required
                 value={form.city}
               />
               <Field
                 label="UF"
                 maxLength={2}
                 onChange={(value) => updateForm('state', value)}
-                required
                 value={form.state}
               />
             </div>
@@ -259,8 +291,8 @@ export function InstitutionDetailsDialog({
             </div>
 
             <div className="mt-5 space-y-3">
-              {currentInstitution.admins.length > 0 ? (
-                currentInstitution.admins.map((admin) => (
+              {admins.length > 0 ? (
+                admins.map((admin) => (
                   <div
                     className="flex flex-col gap-3 rounded-lg border border-[#ead9dd] bg-[#fffafa] p-4 sm:flex-row sm:items-center sm:justify-between"
                     key={admin.id}
@@ -276,7 +308,7 @@ export function InstitutionDetailsDialog({
                     </div>
                     <Button
                       aria-label={`Revogar administrador ${admin.name}`}
-                      onClick={() => revokeAdmin(admin.id)}
+                      onClick={() => void revokeAdmin(admin.id)}
                       size="sm"
                       type="button"
                       variant="outline"
@@ -294,15 +326,9 @@ export function InstitutionDetailsDialog({
             </div>
 
             <form
-              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-              onSubmit={assignAdmin}
+              className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px_auto]"
+              onSubmit={(event) => void assignAdmin(event)}
             >
-              <Field
-                label="Nome do administrador"
-                onChange={setAdminName}
-                required
-                value={adminName}
-              />
               <Field
                 label="E-mail do administrador"
                 onChange={setAdminEmail}
@@ -310,10 +336,109 @@ export function InstitutionDetailsDialog({
                 type="email"
                 value={adminEmail}
               />
-              <Button className="self-end" type="submit">
-                Designar
+              <label className="block min-w-0">
+                <span className="mb-2 block text-sm font-semibold text-vince-muted">
+                  Validade do convite
+                </span>
+                <select
+                  className="h-11 w-full rounded-padrao border border-vince-border bg-white px-3 text-vince-text focus:border-vince-primary"
+                  onChange={(event) => setValidDays(Number(event.target.value))}
+                  value={validDays}
+                >
+                  <option value={7}>7 dias</option>
+                  <option value={15}>15 dias</option>
+                  <option value={30}>30 dias</option>
+                </select>
+              </label>
+              <Button className="self-end" disabled={mutations.assignAdmin.isPending} type="submit">
+                Designar ou convidar
               </Button>
             </form>
+            <p className="mt-2 text-sm text-vince-muted">
+              Quem já tem conta na instituição é designado na hora; os demais recebem um convite e
+              passam a administrar a instituição ao aceitá-lo.
+            </p>
+            {invitationUrl && (
+              <div
+                className="mt-3 flex flex-col gap-3 rounded-padrao border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900 sm:flex-row sm:items-center sm:justify-between"
+                role="status"
+              >
+                <p className="break-all">
+                  Link do convite: <span className="font-semibold">{invitationUrl}</span>
+                </p>
+                <Button
+                  onClick={() => void copyInvitation()}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Copiar link
+                </Button>
+              </div>
+            )}
+          </section>
+
+          <section className="mt-6 rounded-lg border border-vince-border p-5">
+            <h3 className="font-bold text-vince-text">Convites</h3>
+            <p className="mt-1 text-sm text-vince-muted">
+              Convites de ingresso emitidos para esta instituição. O link só é exibido na emissão;
+              um convite pendente pode ser revogado a qualquer momento.
+            </p>
+            <div className="mt-4 space-y-3">
+              {invitations.isPending && (
+                <p className="text-sm text-vince-muted" role="status">
+                  Carregando convites…
+                </p>
+              )}
+              {invitations.data?.length === 0 && (
+                <p className="rounded-lg border border-dashed border-vince-border p-4 text-sm text-vince-muted">
+                  Nenhum convite emitido.
+                </p>
+              )}
+              {(invitations.data ?? []).map((invitation) => {
+                const state =
+                  invitation.state === 'EXHAUSTED' && invitation.form === 'OPEN'
+                    ? { ...invitationState.EXHAUSTED, label: 'Esgotado' }
+                    : invitationState[invitation.state];
+                const label = invitation.targetEmail ?? 'Convite aberto';
+                return (
+                  <article
+                    className="flex flex-col gap-3 rounded-lg border border-[#ead9dd] bg-[#fffafa] p-4 sm:flex-row sm:items-center sm:justify-between"
+                    key={invitation.id}
+                  >
+                    <div className="min-w-0 break-words">
+                      <p className="font-semibold text-vince-text">{label}</p>
+                      <p className="text-sm text-vince-muted">
+                        {roleLabel[invitation.roleCode] ?? invitation.roleCode} · válido até{' '}
+                        {formatDate(invitation.expiresAt)}
+                        {invitation.form === 'OPEN' &&
+                          ` · ${invitation.useCount}${invitation.maxUses ? `/${invitation.maxUses}` : ''} usos`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${state.className}`}
+                      >
+                        {state.label}
+                      </span>
+                      {invitation.state === 'ACTIVE' && (
+                        <Button
+                          aria-label={`Revogar convite de ${label}`}
+                          disabled={mutations.revokeInvitation.isPending}
+                          onClick={() => void revokeInvitation(invitation.id)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                          Revogar
+                        </Button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </section>
 
           <section className="mt-6 rounded-lg border border-vince-border bg-[#fffafa] p-5">
@@ -330,7 +455,6 @@ export function InstitutionDetailsDialog({
                     return;
                   }
                   onDeactivate(currentInstitution.id);
-                  toast.success('Instituição reativada.');
                 }}
                 type="button"
                 variant={inactive ? 'primary' : 'outline'}
@@ -353,7 +477,6 @@ export function InstitutionDetailsDialog({
         onConfirm={() => {
           onDeactivate(currentInstitution.id);
           setConfirmDeactivate(false);
-          toast.success('Instituição desativada.');
         }}
         onOpenChange={setConfirmDeactivate}
         open={confirmDeactivate}

@@ -142,3 +142,22 @@ ação na interface não substitui autorização no servidor.
 As metas de experiência são LCP ≤ 2,5 s, INP ≤ 200 ms e CLS ≤ 0,1 no percentil 75.
 Esses limites exigem medição própria; aprovação de build, testes e capturas não
 comprova desempenho em produção. Consulte a auditoria para o restante das pendências.
+
+## Integração com o backend
+
+As telas de Acesso, Instituição, Curso, Turma, Evento, Equipe e Artigo falam com o
+`vince-back` real (`src/shared/api/http.ts`); as demais ainda usam os dados de demonstração.
+
+1. Suba o backend (em `vince-back`): `docker compose up -d`, `pnpm run db:deploy`,
+   `pnpm run db:seed` e `pnpm run start`. Defina a senha do `admin@vinceart.local` com o
+   link impresso pela carga inicial (`/password/reset?token=…`, aberto neste frontend).
+2. Copie `.env.example` para `.env` e rode `pnpm dev`: o Vite faz proxy de `/api` para
+   `http://localhost:3000`.
+3. Tipos da API: `pnpm run api:types` regenera `src/shared/api/schema.ts`.
+
+Testes de integração (Playwright contra a pilha real; cada execução monta o próprio cenário
+pela API):
+
+```bash
+E2E_ADMIN_PASSWORD='<senha do admin>' pnpm run test:integration
+```

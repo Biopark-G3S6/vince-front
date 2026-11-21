@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { initialInstitutions, makeInitials, validateInstitution } from './institution';
+import { makeInitials, validateInstitution } from './institution';
 
-const institution = initialInstitutions[0]!;
 const valid = {
-  name: institution.name,
-  acronym: institution.acronym,
-  legalId: institution.legalId,
-  domain: institution.domain,
-  supportEmail: institution.supportEmail,
-  city: institution.city,
-  state: institution.state,
+  name: 'Faculdade Regional de Tecnologia',
+  acronym: 'FRT',
+  legalId: '12.245.778/0001-18',
+  domain: 'frt.edu.br',
+  supportEmail: 'suporte@frt.edu.br',
+  city: 'São Paulo',
+  state: 'SP',
 };
 
 describe('institution identification', () => {
@@ -35,6 +34,19 @@ describe('institution identification', () => {
     ]) {
       expect(validateInstitution({ ...valid, domain })).toBeTruthy();
     }
+  });
+
+  it('accepts an identification without the optional fields', () => {
+    expect(
+      validateInstitution({
+        ...valid,
+        legalId: '',
+        domain: '',
+        supportEmail: '',
+        city: '',
+        state: '',
+      }),
+    ).toBeNull();
   });
 
   it('makes initials from trimmed, separated names', () => {

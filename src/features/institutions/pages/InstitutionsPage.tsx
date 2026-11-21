@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import { PageScaffold } from '@features/admin';
 import {
   Button,
@@ -20,7 +22,13 @@ import {
   type InstitutionAdmin,
   type InstitutionStatus,
 } from '../model/institution';
-import { useInstitutions } from '../api/institutionStore';
+import {
+  useInstitutionAdmins,
+  useInstitutionMutations,
+  useInstitutions,
+  type InstitutionInput,
+} from '../api/institutionApi';
+import { describeInstitutionError } from '../model/errors';
 
 const statusLabel: Record<InstitutionStatus, string> = {
   active: 'Ativo',
@@ -34,7 +42,9 @@ const adminToneClass: Record<InstitutionAdmin['tone'], string> = {
 };
 
 export function InstitutionsPage() {
-  const [institutions, setInstitutions] = useInstitutions();
+  const institutionsQuery = useInstitutions();
+  const institutions = useMemo(() => institutionsQuery.data ?? [], [institutionsQuery.data]);
+  const mutations = useInstitutionMutations();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | InstitutionStatus>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -70,35 +80,51 @@ export function InstitutionsPage() {
 
   const activeCount = institutions.filter((institution) => institution.status === 'active').length;
   const inactiveCount = institutions.length - activeCount;
-  const adminsCount = institutions.reduce(
-    (total, institution) => total + institution.admins.length,
-    0,
-  );
-
-  function handleCreate(institution: Institution) {
-    setInstitutions((current) => [institution, ...current]);
-    setSelectedInstitutionId(institution.id);
+  async function handleCreate(
+    input: InstitutionInput & { active: boolean; adminEmail: string },
+  ): Promise<boolean> {
+    try {
+      const created = await mutations.create.mutateAsync(input);
+      toast.success('Instituição cadastrada.');
+      if (input.adminEmail.trim()) {
+        const result = await mutations.assignAdmin.mutateAsync({
+          institutionId: created.id,
+          email: input.adminEmail,
+        });
+        if (result.kind === 'invited') {
+          toast.success('Convite de administrador emitido.', {
+            description: `${window.location.origin}${result.url}`,
+            duration: 20_000,
+          });
+        }
+      }
+      setSelectedInstitutionId(created.id);
+      return true;
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+      return false;
+    }
   }
 
-  function handleUpdate(institution: Institution) {
-    setInstitutions((current) =>
-      current.map((currentInstitution) =>
-        currentInstitution.id === institution.id ? institution : currentInstitution,
-      ),
-    );
+  async function handleUpdate(id: string, input: InstitutionInput) {
+    try {
+      await mutations.update.mutateAsync({ id, input });
+      toast.success('Dados da instituição atualizados.');
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+    }
   }
 
-  function toggleInstitutionStatus(institutionId: string) {
-    setInstitutions((current) =>
-      current.map((institution) =>
-        institution.id === institutionId
-          ? {
-              ...institution,
-              status: institution.status === 'active' ? 'inactive' : 'active',
-            }
-          : institution,
-      ),
-    );
+  async function toggleInstitutionStatus(institutionId: string) {
+    const current = institutions.find((institution) => institution.id === institutionId);
+    if (!current) return;
+    const active = current.status !== 'active';
+    try {
+      await mutations.setActive.mutateAsync({ id: institutionId, active });
+      toast.success(active ? 'Instituição reativada.' : 'Instituição desativada.');
+    } catch (error) {
+      toast.error(describeInstitutionError(error));
+    }
   }
 
   return (
@@ -117,7 +143,7 @@ export function InstitutionsPage() {
       <section className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
         <MetricCard label="Instituições ativas" value={String(activeCount)} />
         <MetricCard label="Instituições inativas" value={String(inactiveCount)} tone="muted" />
-        <MetricCard label="Administradores vinculados" value={String(adminsCount)} />
+        <MetricCard label="Total de instituições" value={String(institutions.length)} />
       </section>
 
       <section className="mt-8 rounded-lg border border-vince-border bg-white p-5 shadow-sm">
@@ -167,12 +193,10 @@ export function InstitutionsPage() {
           role="region"
           tabIndex={0}
         >
-          <div className="grid min-w-[1040px] grid-cols-[2.1fr_0.8fr_1.2fr_0.75fr_1fr_0.5fr] border-b border-vince-border bg-[#fbf8f8] px-8 py-6 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
+          <div className="grid min-w-[1040px] grid-cols-[2.4fr_0.8fr_1.4fr_0.5fr] border-b border-vince-border bg-[#fbf8f8] px-8 py-6 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
             <span>Nome</span>
             <span>Status</span>
             <span>Administradores</span>
-            <span>Cursos</span>
-            <span>Data de cadastro</span>
             <span>Ações</span>
           </div>
 
@@ -184,7 +208,13 @@ export function InstitutionsPage() {
             />
           ))}
 
-          {visibleInstitutions.length === 0 && (
+          {institutionsQuery.isPending && (
+            <div className="px-5 py-14 text-center text-vince-muted" role="status">
+              Carregando instituições…
+            </div>
+          )}
+
+          {!institutionsQuery.isPending && visibleInstitutions.length === 0 && (
             <div className="px-5 py-14 text-center text-vince-muted" role="status">
               Nenhuma instituição encontrada.
             </div>
@@ -209,8 +239,8 @@ export function InstitutionsPage() {
       <InstitutionDetailsDialog
         institution={selectedInstitution}
         onClose={() => setSelectedInstitutionId(null)}
-        onDeactivate={toggleInstitutionStatus}
-        onUpdate={handleUpdate}
+        onDeactivate={(id) => void toggleInstitutionStatus(id)}
+        onUpdate={(id, input) => void handleUpdate(id, input)}
       />
     </PageScaffold>
   );
@@ -223,9 +253,10 @@ type InstitutionRowProps = {
 
 function InstitutionRow({ institution, onSelect }: InstitutionRowProps) {
   const inactive = institution.status === 'inactive';
+  const admins = useInstitutionAdmins(institution.id).data ?? [];
 
   return (
-    <article className="grid min-w-[1040px] grid-cols-[2.1fr_0.8fr_1.2fr_0.75fr_1fr_0.5fr] items-center border-b border-vince-border px-8 py-6 last:border-b-0">
+    <article className="grid min-w-[1040px] grid-cols-[2.4fr_0.8fr_1.4fr_0.5fr] items-center border-b border-vince-border px-8 py-6 last:border-b-0">
       <div className="flex items-center gap-5">
         <span
           className={cn(
@@ -246,7 +277,9 @@ function InstitutionRow({ institution, onSelect }: InstitutionRowProps) {
             {institution.name}
           </h2>
           <p className={cn('text-base text-vince-muted', inactive && 'text-[#9d9497]')}>
-            {institution.acronym} · {institution.city}, {institution.state}
+            {[institution.acronym, [institution.city, institution.state].filter(Boolean).join(', ')]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
           <p className="mt-1 text-sm text-vince-muted">{institution.domain}</p>
         </div>
@@ -260,9 +293,9 @@ function InstitutionRow({ institution, onSelect }: InstitutionRowProps) {
       </div>
 
       <div>
-        {institution.admins.length > 0 ? (
+        {admins.length > 0 ? (
           <div className="flex -space-x-2">
-            {institution.admins.slice(0, 3).map((admin) => (
+            {admins.slice(0, 3).map((admin) => (
               <span
                 aria-label={admin.name}
                 className={cn(
@@ -275,9 +308,9 @@ function InstitutionRow({ institution, onSelect }: InstitutionRowProps) {
                 {admin.initials}
               </span>
             ))}
-            {institution.admins.length > 3 && (
+            {admins.length > 3 && (
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#ded9d7] text-sm font-bold text-[#55494c] ring-2 ring-white">
-                +{institution.admins.length - 3}
+                +{admins.length - 3}
               </span>
             )}
           </div>
@@ -285,12 +318,6 @@ function InstitutionRow({ institution, onSelect }: InstitutionRowProps) {
           <span className="text-lg leading-7 text-[#9d9497]">Nenhum administrador</span>
         )}
       </div>
-
-      <span className="text-lg font-semibold text-vince-muted">{institution.coursesActive}</span>
-
-      <time className={cn('text-lg text-vince-muted', inactive && 'text-[#9d9497]')}>
-        {institution.createdAt}
-      </time>
 
       <button
         aria-label={`Detalhes de ${institution.name}`}

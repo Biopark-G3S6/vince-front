@@ -1,4 +1,4 @@
-import type { Role } from './persona';
+import type { Role, SessionUser } from './persona';
 
 export type AdminSection =
   | 'dashboard'
@@ -20,9 +20,15 @@ export type AdminSection =
   | 'access'
   | 'settings';
 
+/**
+ * A navegação por perfil. Serve só para mostrar o que faz sentido a cada um: a
+ * autorização é do servidor, que recusa com 403 o que não for permitido (ADR-0014 §11).
+ */
 const allowedSections: Record<Role, readonly AdminSection[]> = {
+  systemAdmin: ['dashboard', 'institutions', 'notifications', 'language', 'access'],
   advisor: [
     'dashboard',
+    'classes',
     'events',
     'teams',
     'articles',
@@ -42,6 +48,7 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
     'classes',
     'events',
     'people',
+    'teams',
     'articles',
     'templates',
     'editor',
@@ -52,10 +59,10 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
   ],
   institutionAdmin: [
     'dashboard',
-    'institutions',
     'courses',
-    'classes',
+    'people',
     'events',
+    'teams',
     'articles',
     'templates',
     'editor',
@@ -67,6 +74,7 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
   student: [
     'dashboard',
     'events',
+    'teams',
     'articles',
     'editor',
     'templates',
@@ -79,8 +87,13 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
   ],
 };
 
-export function canAccessSection(role: Role, section: AdminSection): boolean {
-  return allowedSections[role].includes(section);
+/** Aceita o perfil ou o usuário: o usuário com vários papéis vê a união das seções. */
+export function canAccessSection(
+  who: Role | Pick<SessionUser, 'roles'>,
+  section: AdminSection,
+): boolean {
+  const roles = typeof who === 'string' ? [who] : who.roles;
+  return roles.some((role) => allowedSections[role].includes(section));
 }
 
 export function sectionsForRole(role: Role): readonly AdminSection[] {

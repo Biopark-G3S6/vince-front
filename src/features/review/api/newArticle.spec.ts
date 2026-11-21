@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createEvent, createTeam, currentArticle, listArticles } from '@features/articles';
 
@@ -15,8 +15,16 @@ const team = {
 };
 
 beforeEach(() => {
+  // O cronograma de exemplo tem prazos fixos; o relógio fica antes deles, senão a etapa
+  // vencida fecha sozinha (RF-REV-003) e o resultado passa a depender da data de execução.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));
   window.localStorage.clear();
   window.sessionStorage.clear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('criar equipe no evento (RF-EQP-001)', () => {
