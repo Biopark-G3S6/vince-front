@@ -61,7 +61,7 @@ export function AdvisorTeamsPanel() {
     withSignal: (team) => team.signals.length > 0,
   };
   const comparators: Record<Sort, (a: TeamWithSignals, b: TeamWithSignals) => number> = {
-    deadline: (a, b) => a.milestone.deadline.localeCompare(b.milestone.deadline),
+    deadline: (a, b) => (a.milestone.deadline ?? '').localeCompare(b.milestone.deadline ?? ''),
     lastEdit: (a, b) => a.lastEditedAt.localeCompare(b.lastEditedAt),
     name: (a, b) => compareText(a.name, b.name),
     signals: (a, b) => b.signals.length - a.signals.length || compareText(a.name, b.name),
@@ -195,6 +195,9 @@ function EventCard({ event }: { event: CourseEvent }) {
       <h3 className="mt-5 text-sm font-bold uppercase tracking-[0.08em] text-vince-muted">
         {t('course.schedule')}
       </h3>
+      {event.schedule.length === 0 && (
+        <p className="mt-2 text-sm text-vince-muted">{t('course.scheduleUnknown')}</p>
+      )}
       <ol className="mt-2 flex flex-wrap gap-x-8 gap-y-2">
         {event.schedule.map((milestone, index) => (
           <li className="text-vince-text" key={milestone.name}>

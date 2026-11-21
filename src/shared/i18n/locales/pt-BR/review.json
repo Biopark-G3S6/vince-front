@@ -16,6 +16,7 @@
   },
   "milestone": {
     "deadline": "Prazo: {{date}}",
+    "deadlineUnknown": "Prazo não informado pela API",
     "current": "Etapa corrente",
     "upcoming": "Próxima",
     "delivered": "Entregue",

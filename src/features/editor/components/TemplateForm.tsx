@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { useCurrentUser } from '@features/admin';
 import {
+  useTemplateCourses,
   useSaveTemplate,
   currentVersion,
   defaultFormat,
@@ -14,6 +15,7 @@ import {
   type StoredTemplate,
   type TemplateFormat,
 } from '@features/articles';
+import { isBackendEnabled } from '@shared/api/client';
 import { useFormatters } from '@shared/i18n';
 import { Button, Notice, UploadIcon } from '@shared/ui';
 
@@ -49,6 +51,8 @@ export function TemplateForm({
   const user = useCurrentUser();
   const { formatDateTime } = useFormatters();
   const saveTemplate = useSaveTemplate();
+  const coursesQuery = useTemplateCourses();
+  const backendMode = isBackendEnabled();
   const readOnly = template !== null && !template.canMaintain;
   const relatedEventId =
     template?.eventId ?? events.find((event) => event.templateId === template?.id)?.id;
@@ -61,6 +65,7 @@ export function TemplateForm({
       : 'personal',
   );
   const [eventId, setEventId] = useState(relatedEventId ?? initialEventId ?? events[0]?.id ?? '');
+  const [courseId, setCourseId] = useState(template?.courseId ?? '');
   const [format, setFormat] = useState<TemplateFormat>(
     template
       ? {
@@ -88,6 +93,8 @@ export function TemplateForm({
   });
   const formatAsTemplate = { ...format, description, id: 'draft', label: title, title };
   const canPublish = user.role !== 'student' && events.length > 0;
+  const selectedBackendCourseId =
+    courseId || (user.role === 'coordinator' ? (coursesQuery.data?.[0]?.id ?? '') : '');
 
   async function importFile(file: File) {
     if (!file.name.toLowerCase().endsWith('.docx')) {
@@ -135,10 +142,11 @@ export function TemplateForm({
     const selectedEvent =
       visibility === 'event' ? events.find((event) => event.id === eventId) : undefined;
     if (visibility === 'event' && (!canPublish || !selectedEvent)) return;
+    if (backendMode && user.role === 'coordinator' && !selectedBackendCourseId) return;
     saveTemplate.mutate(
       {
         content: editor.getJSON(),
-        courseId: selectedEvent?.courseId ?? null,
+        courseId: backendMode ? selectedBackendCourseId || null : (selectedEvent?.courseId ?? null),
         description: description.trim(),
         eventId: visibility === 'event' ? eventId : undefined,
         format,
@@ -242,17 +250,37 @@ export function TemplateForm({
           />
         </label>
         <label className={labelClass}>
-          Disponibilidade
-          <select
-            className={fieldClass}
-            onChange={(event) => setVisibility(event.target.value as 'personal' | 'event')}
-            value={visibility}
-          >
-            <option value="personal">Meus modelos (pessoal)</option>
-            {canPublish && <option value="event">Modelo do evento</option>}
-          </select>
+          {backendMode ? 'Escopo do modelo' : 'Disponibilidade'}
+          {backendMode ? (
+            <select
+              className={fieldClass}
+              onChange={(event) => setCourseId(event.target.value)}
+              value={selectedBackendCourseId}
+            >
+              {user.role === 'institutionAdmin' && <option value="">Toda a instituição</option>}
+              {(coursesQuery.data ?? []).map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              className={fieldClass}
+              onChange={(event) => setVisibility(event.target.value as 'personal' | 'event')}
+              value={visibility}
+            >
+              <option value="personal">Meus modelos (pessoal)</option>
+              {canPublish && <option value="event">Modelo do evento</option>}
+            </select>
+          )}
         </label>
-        {visibility === 'event' && (
+        {backendMode && user.role === 'coordinator' && coursesQuery.isError && (
+          <Notice className="md:col-span-2" tone="danger">
+            Não foi possível carregar os cursos que você coordena.
+          </Notice>
+        )}
+        {!backendMode && visibility === 'event' && (
           <label className={`${labelClass} md:col-span-2`}>
             Evento
             <select

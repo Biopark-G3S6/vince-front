@@ -48,6 +48,7 @@
     "signals": "Sinais",
     "actions": "Ir para",
     "deadline": "Prazo: {{date}}",
+    "deadlineUnknown": "Prazo não informado",
     "advisor": "Orientador: {{name}}",
     "noSignal": "Nenhum",
     "article": "Artigo",
@@ -62,10 +63,13 @@
   },
   "signal": {
     "NO_RECENT_EDIT": "Sem edição há {{days}} dias ou mais",
+    "NO_EDIT_FOR_LONG_PERIOD": "Sem edição há um período prolongado",
     "REPEATED_AUTOMATIC_DELIVERY": "Entrega automática em etapas seguidas",
     "REMARKS_ACCUMULATED": "Apontamentos acumulados sem atendimento",
     "MEMBER_NEVER_EDITED": "Integrante que nunca editou o artigo",
-    "DEADLINE_NEAR_WITHOUT_CHANGE": "Prazo próximo sem alteração desde a devolução"
+    "DEADLINE_NEAR_WITHOUT_CHANGE": "Prazo próximo sem alteração desde a devolução",
+    "DEADLINE_APPROACHING": "Prazo de entrega se aproximando",
+    "DEADLINE_NEAR_WITHOUT_EDIT": "Prazo próximo sem edição registrada"
   },
   "teams": {
     "emptyTitle": "Nenhuma equipe designada a você",
@@ -85,6 +89,7 @@
     "withSignal": "Com sinal ativo",
     "concluded": "Artigos concluídos",
     "schedule": "Cronograma",
+    "scheduleUnknown": "A API ainda não fornece o cronograma das etapas.",
     "showTeams": "Ver equipes",
     "hideTeams": "Ocultar equipes",
     "coordinatorNote": "O coordenador vê a situação das equipes, mas não participa da discussão nem do ciclo de apontamentos."

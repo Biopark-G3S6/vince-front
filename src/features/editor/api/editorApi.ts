@@ -1,8 +1,15 @@
 import type { JSONContent } from '@tiptap/core';
 
-import { canReadArticle, currentArticle, DEMO_ARTICLE_ID } from '@features/articles';
+import {
+  cacheBackendArticle,
+  canReadArticle,
+  currentArticle,
+  DEMO_ARTICLE_ID,
+  type BackendArticleSummary,
+} from '@features/articles';
 import { findMilestone, getReviewCycle, saveDraft } from '@features/review';
 import { ApiError } from '@shared/api/apiError';
+import { apiRequest, isBackendEnabled, requireUuid } from '@shared/api/client';
 import { createId, createMockCollection, respond } from '@shared/api/mockDb';
 
 import {
@@ -13,6 +20,7 @@ import {
   withCover,
   type ArticleParagraph,
 } from '../model/document';
+import { abntNorm } from '../model/editor';
 import type {
   EditorState,
   HistoryEntry,
@@ -165,6 +173,29 @@ function currentContent(state: EditorDb, draft: ArticleParagraph[]): JSONContent
 }
 
 export async function getEditorState(actorId: string): Promise<EditorState> {
+  if (isBackendEnabled()) {
+    const article = await fetchBackendArticle();
+    const isMember = article.memberIds.includes(actorId);
+    const status = article.status as EditorState['status'];
+    const lockCode =
+      status === 'IN_REVIEW'
+        ? 'ARTICLE_LOCKED_FOR_REVIEW'
+        : status === 'FINISHED'
+          ? 'ARTICLE_ALREADY_FINISHED'
+          : isMember
+            ? null
+            : 'READ_ONLY_ROLE';
+    const margins = article.formatProfile.margins;
+    return {
+      editable: isMember && (status === 'STARTED' || status === 'IN_PROGRESS'),
+      importMeta: null,
+      isMember,
+      lastEditedAt: article.updatedAt,
+      lockCode,
+      margins: isPageMargins(margins) ? margins : abntNorm.margins,
+      status,
+    };
+  }
   assertReach(actorId);
 
   const cycle = await readCycle();
@@ -229,8 +260,63 @@ function initialDocument(draft: ArticleParagraph[], references: Reference[]): JS
 
 export type StoredDocument = { seed: JSONContent; ydoc: string | null };
 
+async function fetchBackendArticle() {
+  const article = await apiRequest<BackendArticleSummary>(
+    `/articles/${requireUuid(currentArticle.id)}`,
+  );
+  cacheBackendArticle(article);
+  return article;
+}
+
+function cleanArticleContent(content: JSONContent): JSONContent {
+  const attrs = { ...content.attrs };
+  delete attrs.vinceFormat;
+  return { ...content, attrs };
+}
+
+function isPageMargins(value: unknown): value is PageMargins {
+  if (!value || typeof value !== 'object') return false;
+  const margins = value as Record<string, unknown>;
+  return ['top', 'right', 'bottom', 'left'].every(
+    (key) => typeof margins[key] === 'number' && Number.isFinite(margins[key]),
+  );
+}
+
+function contentToParagraphs(content: JSONContent): ArticleParagraph[] {
+  const plainText = (node: JSONContent): string => {
+    if (node.type === 'text') return node.text ?? '';
+    if (node.type === 'hardBreak') return ' ';
+    return (node.content ?? []).map(plainText).join(' ');
+  };
+  const result: ArticleParagraph[] = [];
+  let heading: { id: string; text: string } | null = null;
+  for (const [index, node] of (content.content ?? []).entries()) {
+    const id = String(node.attrs?.blockId ?? `block-${index}`);
+    if (id.startsWith('cover-') || node.type === 'horizontalRule') continue;
+    const text = plainText(node).trim();
+    if (node.type === 'heading') {
+      if (heading) result.push({ heading: heading.text, id: heading.id, text: '' });
+      heading = text ? { id, text } : null;
+      continue;
+    }
+    if (!text) continue;
+    result.push(heading ? { heading: heading.text, id, text } : { id, text });
+    heading = null;
+  }
+  if (heading) result.push({ heading: heading.text, id: heading.id, text: '' });
+  return result;
+}
+
 /** Estado preservado do documento e o conteúdo de partida, para quem o abre primeiro. */
 export async function loadDocument(actorId: string): Promise<StoredDocument> {
+  if (isBackendEnabled()) {
+    const article = await fetchBackendArticle();
+    const content = article.content as JSONContent;
+    return {
+      seed: cleanArticleContent(content?.type === 'doc' ? content : { type: 'doc', content: [] }),
+      ydoc: null,
+    };
+  }
   assertReach(actorId);
 
   const cycle = await readCycle();
@@ -250,6 +336,19 @@ export async function persistDocument(
   actorId: string,
   document: { snapshot: JSONContent; ydoc: string },
 ) {
+  if (isBackendEnabled()) {
+    const article = await fetchBackendArticle();
+    const content = cleanArticleContent(document.snapshot);
+    const updated = await apiRequest<BackendArticleSummary>(
+      `/articles/${requireUuid(article.id)}/content`,
+      {
+        body: { content, formatProfile: article.formatProfile },
+        method: 'PUT',
+      },
+    );
+    cacheBackendArticle(updated);
+    return;
+  }
   const before = db().read();
   const resolve = createCitationResolver(before.references);
   const paragraphs = toParagraphs(document.snapshot, resolve);
@@ -307,6 +406,39 @@ export function registerCheckpoint(
   kind: 'restore' | 'import' | 'manual',
   content: JSONContent,
 ) {
+  if (isBackendEnabled()) {
+    return (async () => {
+      const article = await fetchBackendArticle();
+      const versions = await apiRequest<
+        Array<{
+          id: string;
+          content: JSONContent;
+          kind: string;
+        }>
+      >(`/articles/${requireUuid(article.id)}/history`);
+      const target =
+        kind === 'restore'
+          ? versions.find((version) => JSON.stringify(version.content) === JSON.stringify(content))
+          : undefined;
+      if (target) {
+        const updated = await apiRequest<BackendArticleSummary>(
+          `/articles/${requireUuid(article.id)}/history/${requireUuid(target.id)}/restoration`,
+          { body: {}, method: 'POST' },
+        );
+        cacheBackendArticle(updated);
+        return;
+      }
+      if (kind === 'import') return;
+      const updated = await apiRequest<BackendArticleSummary>(
+        `/articles/${requireUuid(article.id)}/content`,
+        {
+          body: { content: cleanArticleContent(content), formatProfile: article.formatProfile },
+          method: 'PUT',
+        },
+      );
+      cacheBackendArticle(updated);
+    })();
+  }
   return respond(() => {
     assertMember(actorId);
     db().update((draft) => pushCheckpoint(draft, actorId, kind, content));
@@ -329,6 +461,37 @@ async function assertEditable(actorId: string) {
 
 /** RF-EDT-008 — Entregas e pontos intermediários, do mais recente para o mais antigo. */
 export async function listHistory(actorId: string): Promise<HistoryEntry[]> {
+  if (isBackendEnabled()) {
+    const article = await fetchBackendArticle();
+    const versions = await apiRequest<
+      Array<{
+        id: string;
+        kind: string;
+        content: JSONContent;
+        authorId: string | null;
+        metadata: Record<string, unknown>;
+        createdAt: string;
+      }>
+    >(`/articles/${requireUuid(article.id)}/history`);
+    return versions.map((version) => ({
+      at: version.createdAt,
+      authorName: version.authorId ?? '—',
+      authors: {},
+      automatic: version.kind === 'SUBMISSION',
+      content: version.content,
+      id: version.id,
+      kind:
+        version.kind === 'IMPORT'
+          ? 'import'
+          : version.kind === 'RESTORE'
+            ? 'restore'
+            : version.kind === 'SUBMISSION'
+              ? 'delivery'
+              : 'checkpoint',
+      milestone: typeof version.metadata.milestone === 'string' ? version.metadata.milestone : '',
+      paragraphs: contentToParagraphs(version.content),
+    }));
+  }
   assertMember(actorId);
 
   const cycle = await readCycle();
@@ -363,10 +526,35 @@ export async function listHistory(actorId: string): Promise<HistoryEntry[]> {
 
 /** A restauração cria estado novo e só é possível com o artigo editável (RN3, E1). */
 export function assertCanRestore(actorId: string) {
+  if (isBackendEnabled()) {
+    return getEditorState(actorId).then((state) => {
+      if (state.lockCode) throw new ApiError(state.lockCode);
+    });
+  }
   return assertEditable(actorId);
 }
 
 export function listReferences(actorId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest<
+      Array<{
+        id: string;
+        type: string;
+        authors: unknown;
+        title: string;
+        year: number | null;
+        vehicle: string | null;
+        edition: string | null;
+        place: string | null;
+        publisher: string | null;
+        pages: string | null;
+        doi: string | null;
+        url: string | null;
+      }>
+    >(`/articles/${requireUuid(currentArticle.id)}/references`).then((items) =>
+      items.map(toFrontendReference),
+    );
+  }
   return respond(() => {
     assertReach(actorId);
     return db().read().references;
@@ -375,7 +563,42 @@ export function listReferences(actorId: string) {
 
 /** Referências do artigo, para a verificação cruzada de RF-IAA-002. */
 export function getArticleReferences() {
+  if (isBackendEnabled()) return listReferences(currentArticle.advisor.id);
   return respond(() => db().read().references);
+}
+
+function toFrontendReference(reference: {
+  id: string;
+  type: string;
+  authors: unknown;
+  title: string;
+  year: number | null;
+  vehicle: string | null;
+  edition: string | null;
+  place: string | null;
+  publisher: string | null;
+  pages: string | null;
+  doi: string | null;
+  url: string | null;
+}): Reference {
+  const authors = Array.isArray(reference.authors)
+    ? reference.authors.filter((item): item is string => typeof item === 'string')
+    : [];
+  return {
+    ...emptyReference,
+    authors,
+    doi: reference.doi ?? '',
+    edition: reference.edition ?? '',
+    id: reference.id,
+    pages: reference.pages ?? '',
+    place: reference.place ?? '',
+    publisher: reference.publisher ?? '',
+    title: reference.title,
+    type: reference.type as Reference['type'],
+    url: reference.url ?? '',
+    vehicle: reference.vehicle ?? '',
+    year: reference.year === null ? '' : String(reference.year),
+  };
 }
 
 /** A citação é vínculo: alterada a referência, o texto do rascunho acompanha. */
@@ -405,6 +628,42 @@ export async function saveReference(
   actorId: string,
   { data, id, lenient = false }: SaveReferenceInput,
 ) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    const body = {
+      type: data.type,
+      authors: data.authors,
+      title: data.title,
+      year: data.year ? Number(data.year) : null,
+      vehicle: data.vehicle,
+      edition: data.edition,
+      place: data.place,
+      publisher: data.publisher,
+      pages: data.pages,
+      doi: data.doi,
+      url: data.url,
+    };
+    const saved = await apiRequest<{
+      id: string;
+      type: string;
+      authors: unknown;
+      title: string;
+      year: number | null;
+      vehicle: string | null;
+      edition: string | null;
+      place: string | null;
+      publisher: string | null;
+      pages: string | null;
+      doi: string | null;
+      url: string | null;
+    }>(
+      id
+        ? `/articles/${articleId}/references/${requireUuid(id, 'RESOURCE_NOT_FOUND')}`
+        : `/articles/${articleId}/references`,
+      { body, method: id ? 'PATCH' : 'POST' },
+    );
+    return toFrontendReference(saved);
+  }
   await assertEditable(actorId);
 
   const missing = missingFields(data);
@@ -443,6 +702,15 @@ export async function deleteReference(
   referenceId: string,
   citedInEditor: string[] = [],
 ) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    if (citedInEditor.length > 0) throw new ApiError('REFERENCE_IN_USE');
+    await apiRequest<void>(
+      `/articles/${articleId}/references/${requireUuid(referenceId, 'RESOURCE_NOT_FOUND')}`,
+      { method: 'DELETE' },
+    );
+    return;
+  }
   await assertEditable(actorId);
 
   db().update((draft) => {
@@ -479,7 +747,27 @@ export function lookupDoi(doi: string) {
   });
 }
 
-export async function setMargins(actorId: string, margins: PageMargins) {
+export async function setMargins(
+  actorId: string,
+  margins: PageMargins,
+  currentDocument?: JSONContent,
+) {
+  if (isBackendEnabled()) {
+    const article = await fetchBackendArticle();
+    const content = cleanArticleContent(currentDocument ?? article.content);
+    const updated = await apiRequest<BackendArticleSummary>(
+      `/articles/${requireUuid(article.id)}/content`,
+      {
+        body: {
+          content,
+          formatProfile: { ...article.formatProfile, margins },
+        },
+        method: 'PUT',
+      },
+    );
+    cacheBackendArticle(updated);
+    return;
+  }
   await assertEditable(actorId);
   db().update((draft) => {
     draft.margins = margins;
@@ -489,8 +777,25 @@ export async function setMargins(actorId: string, margins: PageMargins) {
 /** Os metadados do arquivo importado são preservados (RF-EDT-006 RN3). */
 export async function recordImport(
   actorId: string,
-  file: { fileName: string; lastModified: string; sizeInBytes: number },
+  file: { fileName: string; lastModified: string; sizeInBytes: number; content?: JSONContent },
 ) {
+  if (isBackendEnabled()) {
+    if (!file.content) throw new ApiError('VALIDATION_FAILED');
+    const articleId = requireUuid(currentArticle.id);
+    const imported = await apiRequest<BackendArticleSummary>(`/articles/${articleId}/imports`, {
+      body: {
+        fileName: file.fileName,
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        sizeBytes: file.sizeInBytes,
+        content: cleanArticleContent(file.content),
+        metadata: { lastModified: file.lastModified },
+        confirmReplace: true,
+      },
+      method: 'POST',
+    });
+    cacheBackendArticle(imported);
+    return;
+  }
   await assertEditable(actorId);
   db().update((draft) => {
     draft.importMeta = {
@@ -509,6 +814,18 @@ export type ExportData = {
 
 /** RF-EDT-007 — Conteúdo a exportar, disponível em qualquer estado do artigo (RN2). */
 export async function getExportData(actorId: string): Promise<ExportData> {
+  if (isBackendEnabled()) {
+    const [article, references] = await Promise.all([
+      fetchBackendArticle(),
+      listReferences(actorId),
+    ]);
+    const margins = article.formatProfile.margins;
+    return {
+      content: cleanArticleContent(article.content),
+      margins: isPageMargins(margins) ? margins : abntNorm.margins,
+      references,
+    };
+  }
   assertReach(actorId);
 
   const cycle = await readCycle();

@@ -5,12 +5,20 @@
 export class ApiError extends Error {
   readonly code: string;
   readonly meta: Record<string, unknown>;
+  readonly correlationId: string | null;
+  readonly httpStatus: number | null;
 
-  constructor(code: string, meta: Record<string, unknown> = {}) {
+  constructor(
+    code: string,
+    meta: Record<string, unknown> = {},
+    details: { correlationId?: string | null; httpStatus?: number | null } = {},
+  ) {
     super(code);
     this.name = 'ApiError';
     this.code = code;
     this.meta = meta;
+    this.correlationId = details.correlationId ?? null;
+    this.httpStatus = details.httpStatus ?? null;
   }
 }
 

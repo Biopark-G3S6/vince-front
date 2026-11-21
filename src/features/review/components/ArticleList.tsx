@@ -1,5 +1,6 @@
 import { articleHref, useArticles } from '@features/articles';
 import { canAccessSection, useCurrentUser } from '@features/admin';
+import { isBackendEnabled } from '@shared/api/client';
 import { useFormatters } from '@shared/i18n';
 import { EmptyState, SectionPanel, StatusBadge, type BadgeTone } from '@shared/ui';
 
@@ -27,20 +28,32 @@ export function ArticleList({ title }: { title: string }) {
   const { formatDate } = useFormatters();
   const user = useCurrentUser();
   const { data: articles = [] } = useArticles();
+  const backendMode = isBackendEnabled();
 
   return (
     <SectionPanel className="mt-8" title={title}>
       {articles.length === 0 ? (
         <EmptyState
           title="Nenhum artigo disponível ainda."
-          description="Escolha um modelo para iniciar sua produção ou inscreva-se em um evento."
+          description={
+            backendMode && user.role === 'student'
+              ? 'A API atual ainda não lista artigos por integrante. Abra um link de artigo recebido na discussão ou em uma notificação.'
+              : backendMode
+                ? 'Não há artigos disponíveis no escopo retornado pelo backend.'
+                : 'Escolha um modelo para iniciar sua produção ou inscreva-se em um evento.'
+          }
         />
       ) : (
         <ul className="divide-y divide-vince-border">
           {articles.map((article) => {
-            const cycle = readCycleOf(article.id);
-            const milestone = findMilestone(cycle, cycle.currentMilestoneId);
-            const view = statusView[cycle.status];
+            const cycle = backendMode ? null : readCycleOf(article.id);
+            const status = cycle?.status ?? article.progress?.status ?? 'STARTED';
+            const milestone = cycle
+              ? findMilestone(cycle, cycle.currentMilestoneId)
+              : article.milestones[0];
+            const pendingRemarkCount =
+              cycle?.remarks.filter(isPending).length ?? article.progress?.pendingRemarkCount ?? 0;
+            const view = statusView[status];
 
             return (
               <li
@@ -60,10 +73,11 @@ export function ArticleList({ title }: { title: string }) {
                   <StatusBadge label={view.label} tone={view.tone} />
                   {milestone && (
                     <p className="mt-2">
-                      {milestone.name} · até {formatDate(milestone.deadline)}
+                      {milestone.name}
+                      {milestone.deadline ? ` · até ${formatDate(milestone.deadline)}` : ''}
                     </p>
                   )}
-                  <p>{cycle.remarks.filter(isPending).length} apontamentos pendentes</p>
+                  <p>{pendingRemarkCount} apontamentos pendentes</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {destinations

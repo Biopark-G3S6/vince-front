@@ -15,6 +15,7 @@ import {
   type TemplatePreview,
 } from '@features/articles';
 import { getErrorCode } from '@shared/api/apiError';
+import { isBackendEnabled } from '@shared/api/client';
 import { cn } from '@shared/lib/cn';
 import { Button, Notice, UploadIcon } from '@shared/ui';
 
@@ -79,11 +80,18 @@ function Pill({ children }: { children: ReactNode }) {
 type TemplateCardProps = {
   template: StoredTemplate;
   event?: EventTemplate;
+  chooseDisabled?: boolean;
   onChoose: () => void;
   onEdit: () => void;
 };
 
-function TemplateCard({ template, event, onChoose, onEdit }: TemplateCardProps) {
+function TemplateCard({
+  template,
+  event,
+  chooseDisabled = false,
+  onChoose,
+  onEdit,
+}: TemplateCardProps) {
   const version =
     event?.templateId === template.id
       ? (event.templateVersion ?? currentVersion(template).number)
@@ -97,9 +105,11 @@ function TemplateCard({ template, event, onChoose, onEdit }: TemplateCardProps) 
           <Pill>
             {event
               ? `Versão ${version}`
-              : template.visibility === 'standard'
-                ? 'Padrão'
-                : 'Pessoal'}
+              : template.courseId
+                ? 'Curso'
+                : template.visibility === 'standard'
+                  ? 'Padrão'
+                  : 'Pessoal'}
           </Pill>
           {event && (
             <Pill>
@@ -110,10 +120,15 @@ function TemplateCard({ template, event, onChoose, onEdit }: TemplateCardProps) 
         <h3 className="text-lg font-extrabold leading-snug">{template.title}</h3>
         {event && <p className="mt-1 text-sm font-semibold text-vince-primary">{event.name}</p>}
         <p className="mt-2 flex-1 text-sm leading-6 text-vince-muted">{template.description}</p>
-        <Button className="mt-5 w-full" onClick={onChoose} variant="outline">
+        <Button
+          className="mt-5 w-full"
+          disabled={chooseDisabled}
+          onClick={onChoose}
+          variant="outline"
+        >
           Usar este modelo
         </Button>
-        {template.canMaintain && template.visibility !== 'standard' && (
+        {template.canMaintain && (
           <Button className="mt-2" onClick={onEdit} size="sm" variant="ghost">
             Editar modelo
           </Button>
@@ -175,10 +190,8 @@ function TemplateLibrary() {
     );
 
   const { events, templates } = query.data;
+  const backendMode = isBackendEnabled();
   const contextEvent = events.find((event) => event.id === contextId);
-  const standard = templates.filter(
-    (template) => template.active && template.visibility === 'standard',
-  );
   const personal = templates.filter(
     (template) => template.visibility === 'personal' && template.ownerId === user.id,
   );
@@ -192,6 +205,14 @@ function TemplateLibrary() {
             : template.id === event.templateId),
       )
       .map((template) => ({ event, template })),
+  );
+  const eventTemplateIds = new Set(eventModels.map(({ template }) => template.id));
+  const canCreateTemplate = !backendMode || user.permissions?.includes('TEMPLATE:CREATE') === true;
+  const standard = templates.filter(
+    (template) =>
+      template.active &&
+      (template.visibility === 'standard' ||
+        (backendMode && template.courseId !== null && !eventTemplateIds.has(template.id))),
   );
   const official = eventModels.filter(({ event }) => !event.kind || event.kind === 'official');
   const independent = eventModels.filter(
@@ -224,6 +245,7 @@ function TemplateLibrary() {
       <div className="mt-5 grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
         {items.map(({ template, event }) => (
           <TemplateCard
+            chooseDisabled={backendMode}
             event={event}
             key={`${event?.id ?? 'personal'}-${template.id}`}
             onChoose={() => setSelection({ eventId: event?.id ?? contextEvent?.id, template })}
@@ -237,6 +259,18 @@ function TemplateLibrary() {
 
   return (
     <div className="min-w-0 space-y-10 py-6">
+      {backendMode && (
+        <Notice tone="warning">
+          Os modelos são carregados e salvos pelo backend. A API atual ainda não oferece cadastro de
+          eventos/equipes nem criação de artigo; por isso, a seleção de modelo para um novo artigo
+          está desabilitada.
+        </Notice>
+      )}
+      {backendMode && !user.permissions?.includes('TEMPLATE:READ') && (
+        <Notice className="mt-4" tone="warning">
+          Seu perfil não tem permissão para consultar modelos institucionais.
+        </Notice>
+      )}
       {contextEvent && (
         <Notice tone={user.role === 'student' && !contextRegistered ? 'warning' : 'info'}>
           <p className="font-bold">Artigo para {contextEvent.name}</p>
@@ -267,13 +301,17 @@ function TemplateLibrary() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => setEditing('new')} variant="outline">
-              Criar modelo
-            </Button>
-            <Button onClick={() => setEditing('import')}>
-              <UploadIcon className="h-4 w-4" />
-              Importar modelo
-            </Button>
+            {canCreateTemplate && (
+              <>
+                <Button onClick={() => setEditing('new')} variant="outline">
+                  Criar modelo
+                </Button>
+                <Button onClick={() => setEditing('import')}>
+                  <UploadIcon className="h-4 w-4" />
+                  Importar modelo
+                </Button>
+              </>
+            )}
           </div>
         </div>
         {cards(standard.map((template) => ({ template })))}
@@ -320,14 +358,16 @@ function TemplateLibrary() {
               Você ainda não tem modelos pessoais. Importe um arquivo Word (.docx) de até 10 MB ou
               crie um modelo no editor.
             </p>
-            <Button
-              className="mt-3"
-              onClick={() => setEditing('import')}
-              size="sm"
-              variant="outline"
-            >
-              Importar meu primeiro modelo
-            </Button>
+            {canCreateTemplate && (
+              <Button
+                className="mt-3"
+                onClick={() => setEditing('import')}
+                size="sm"
+                variant="outline"
+              >
+                Importar meu primeiro modelo
+              </Button>
+            )}
           </div>
         )}
       </section>
@@ -339,13 +379,14 @@ function TemplateLibrary() {
           </p>
         </div>
         <Button
+          disabled={backendMode}
           onClick={() => setSelection({ eventId: contextEvent?.id, template: null })}
           variant="outline"
         >
           Começar em branco
         </Button>
       </div>
-      {selection && (
+      {selection && !backendMode && (
         <CreateArticleDialog
           events={events}
           onClose={() => setSelection(null)}

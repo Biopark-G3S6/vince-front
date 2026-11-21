@@ -1,6 +1,7 @@
 export {
   allowedScopes,
   articleHref,
+  cacheBackendArticle,
   canReadArticle,
   changeEventTemplate,
   createArticle,
@@ -12,6 +13,7 @@ export {
   listEventRegistrations,
   listEvents,
   listTemplates,
+  listTemplateCourses,
   readArticles,
   registerForEvent,
   saveTemplate,
@@ -20,6 +22,7 @@ export {
   type CreateArticleInput,
   type CreateEventInput,
   type CreateTeamInput,
+  type BackendArticleSummary,
   type EventRegistration,
   type SaveTemplateInput,
 } from './api/registryApi';
@@ -36,6 +39,7 @@ export {
   useSaveTemplate,
   useSetTemplateActive,
   useTemplates,
+  useTemplateCourses,
 } from './api/hooks';
 export { CreateTeamDialog } from './components/CreateTeamDialog';
 export { EventDirectory } from './components/EventDirectory';

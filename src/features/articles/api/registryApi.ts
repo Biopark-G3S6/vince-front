@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 
 import { ApiError } from '@shared/api/apiError';
+import { apiPagedRequest, apiRequest, isBackendEnabled, requireUuid } from '@shared/api/client';
 import { createId, createMockCollection, respond } from '@shared/api/mockDb';
 
 import {
@@ -469,7 +470,70 @@ function canViewTemplate(actorId: string, template: StoredTemplate, registry: Re
   return true;
 }
 
-export function listTemplates(actorId: string) {
+export function listTemplates(actorId: string, permissions: string[] = []) {
+  if (isBackendEnabled()) {
+    const includeInactive =
+      permissions.includes('TEMPLATE:UPDATE') || permissions.includes('TEMPLATE:DEACTIVATE');
+    return apiPagedRequest<{
+      id: string;
+      courseId: string | null;
+      name: string;
+      description: string | null;
+      active: boolean;
+      currentVersionNumber: number;
+      currentVersionId: string;
+      content: JSONContent;
+      versions?: Array<{
+        id: string;
+        versionNumber: number;
+        content: JSONContent;
+        createdBy: string;
+        createdAt: string;
+      }>;
+    }>(
+      `/article-templates?page=1&pageSize=100${includeInactive ? '&includeInactive=true' : ''}`,
+    ).then(({ data }) =>
+      data.map((template): StoredTemplate => {
+        const versions = (
+          template.versions?.length
+            ? [...template.versions]
+            : [
+                {
+                  id: template.currentVersionId,
+                  versionNumber: template.currentVersionNumber,
+                  content: template.content,
+                  createdAt: '',
+                  createdBy: '',
+                },
+              ]
+        ).sort((left, right) => left.versionNumber - right.versionNumber);
+        const current =
+          versions.find((version) => version.versionNumber === template.currentVersionNumber) ??
+          versions[0]!;
+        const format = templateFormat(current.content);
+        return {
+          ...format,
+          active: template.active,
+          canMaintain:
+            permissions.includes('TEMPLATE:UPDATE') || permissions.includes('TEMPLATE:DEACTIVATE'),
+          courseId: template.courseId,
+          description: template.description ?? '',
+          id: template.id,
+          label: template.name,
+          preview: template.courseId ? 'abnt' : 'official',
+          title: template.name,
+          versions: versions.map((version) => ({
+            content: version.content,
+            createdAt: version.createdAt,
+            createdBy: version.createdBy,
+            number: version.versionNumber,
+            format: templateFormat(version.content),
+          })),
+          visibility: template.courseId ? 'event' : 'standard',
+        };
+      }),
+    );
+  }
   return respond(() => {
     assertCreator(actorId);
     const registry = db.read();
@@ -499,6 +563,30 @@ export function listTemplates(actorId: string) {
   });
 }
 
+export function listTemplateCourses() {
+  if (isBackendEnabled()) {
+    return apiPagedRequest<{ id: string; name: string }>('/courses?page=1&pageSize=100').then(
+      ({ data }) => data,
+    );
+  }
+  return Promise.resolve(courses);
+}
+
+function templateFormat(content: JSONContent): TemplateFormat {
+  const attrs = content.attrs;
+  const value = attrs && typeof attrs === 'object' ? attrs.vinceFormat : undefined;
+  if (!value || typeof value !== 'object') return { ...defaultFormat };
+  const format = value as Record<string, unknown>;
+  return {
+    fontFamily:
+      typeof format.fontFamily === 'string' ? format.fontFamily : defaultFormat.fontFamily,
+    fontSize: typeof format.fontSize === 'number' ? format.fontSize : defaultFormat.fontSize,
+    lineHeight:
+      typeof format.lineHeight === 'number' ? format.lineHeight : defaultFormat.lineHeight,
+    textAlign: format.textAlign === 'left' ? 'left' : defaultFormat.textAlign,
+  };
+}
+
 export type SaveTemplateInput = {
   content: JSONContent;
   courseId: string | null;
@@ -513,6 +601,24 @@ export type SaveTemplateInput = {
 
 /** Uma alteração cria versão nova; modelos pessoais pertencem ao autor. */
 export function saveTemplate(actorId: string, input: SaveTemplateInput) {
+  if (isBackendEnabled()) {
+    const body = {
+      name: input.title.trim(),
+      description: input.description,
+      courseId: input.courseId,
+      content: {
+        ...input.content,
+        attrs: {
+          ...input.content.attrs,
+          vinceFormat: input.format,
+        },
+      },
+    };
+    const path = input.id
+      ? `/article-templates/${requireUuid(input.id, 'RESOURCE_NOT_FOUND')}`
+      : '/article-templates';
+    return apiRequest(path, { body, method: input.id ? 'PATCH' : 'POST' }).then(() => undefined);
+  }
   return respond(() => {
     assertCreator(actorId);
     if (!input.title.trim()) throw new ApiError('VALIDATION_FAILED');
@@ -583,6 +689,13 @@ export function saveTemplate(actorId: string, input: SaveTemplateInput) {
 }
 
 export function setTemplateActive(actorId: string, templateId: string, active: boolean) {
+  if (isBackendEnabled()) {
+    if (active) return Promise.reject(new ApiError('PERMISSION_DENIED'));
+    return apiRequest(
+      `/article-templates/${requireUuid(templateId, 'RESOURCE_NOT_FOUND')}/deactivation`,
+      { body: {}, method: 'POST' },
+    ).then(() => undefined);
+  }
   return respond(() => {
     assertCreator(actorId);
     db.update((draft) => {
@@ -595,6 +708,7 @@ export function setTemplateActive(actorId: string, templateId: string, active: b
 }
 
 export function listEvents(actorId: string) {
+  if (isBackendEnabled()) return Promise.resolve([] as EventTemplate[]);
   return respond(() => {
     assertCreator(actorId);
     const registry = db.read();
@@ -605,6 +719,7 @@ export function listEvents(actorId: string) {
 }
 
 export function allowedScopes(actorId: string): EventScope[] {
+  if (isBackendEnabled()) return [];
   if (actorId === ADMIN_ID) return ['institution', 'course'];
   if (actorId === COORDINATOR_ID) return ['course', 'class'];
   if (actorId === PROFESSOR_ID) return ['class'];
@@ -627,6 +742,7 @@ export type CreateEventInput = {
 };
 
 export function createEvent(actorId: string, input: CreateEventInput) {
+  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
   return respond(() => {
     assertCreator(actorId);
     const kind = input.kind ?? (actorId === PROFESSOR_ID ? 'practice' : 'official');
@@ -683,6 +799,7 @@ export function createEvent(actorId: string, input: CreateEventInput) {
 }
 
 export function listEventRegistrations(actorId: string) {
+  if (isBackendEnabled()) return Promise.resolve([] as EventRegistration[]);
   return respond(() => {
     assertCreator(actorId);
     return db.read().registrations.filter((registration) => registration.studentId === actorId);
@@ -690,6 +807,7 @@ export function listEventRegistrations(actorId: string) {
 }
 
 export function registerForEvent(actorId: string, eventId: string) {
+  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
   return respond((): EventRegistration => {
     if (!isStudent(actorId)) throw new ApiError('PERMISSION_DENIED');
     let result: EventRegistration | undefined;
@@ -727,6 +845,7 @@ export function setEventRegistrationOpen(
   actorId: string,
   input: { eventId: string; open: boolean },
 ) {
+  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
   return respond(() => {
     assertCreator(actorId);
     db.update((draft) => {
@@ -759,6 +878,10 @@ function defaultSchedule(): EventTemplate['schedule'] {
 
 /** Troca do template após a criação do evento (RF-TPL-002 E2). */
 export function changeEventTemplate(actorId: string, eventId: string) {
+  if (isBackendEnabled()) {
+    requireUuid(eventId, 'RESOURCE_NOT_FOUND');
+    return Promise.reject(new ApiError('TEMPLATE_ALREADY_FIXED'));
+  }
   return respond(() => {
     assertCreator(actorId);
 
@@ -771,6 +894,40 @@ export function changeEventTemplate(actorId: string, eventId: string) {
 }
 
 const ACTIVE_KEY = 'vinceart.article';
+const BACKEND_ARTICLE_KEY = 'vinceart.backend.article';
+
+export type BackendArticleSummary = {
+  id: string;
+  eventId: string;
+  teamId: string;
+  advisorId: string | null;
+  memberIds: string[];
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  currentMilestoneId: string | null;
+  currentMilestoneOrder: number | null;
+  lastMilestoneOrder: number | null;
+  currentMilestoneDeadline: string | null;
+  content: JSONContent;
+  formatProfile: Record<string, unknown>;
+  templateVersionId: string | null;
+};
+
+function readBackendArticle(): BackendArticleSummary | null {
+  if (!isBackendEnabled()) return null;
+  try {
+    const raw = window.sessionStorage.getItem(BACKEND_ARTICLE_KEY);
+    return raw ? (JSON.parse(raw) as BackendArticleSummary) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cacheBackendArticle(article: BackendArticleSummary) {
+  if (!isBackendEnabled()) return;
+  window.sessionStorage.setItem(BACKEND_ARTICLE_KEY, JSON.stringify(article));
+}
 
 // O endereço pode indicar o artigo a abrir — é assim que a lista e a notificação levam a ele.
 if (typeof window !== 'undefined') {
@@ -794,10 +951,23 @@ function resolveCurrentArticle(): Article {
  */
 export const currentArticle: Article = {
   get advisor() {
+    const remote = readBackendArticle();
+    if (remote && remote.id === currentArticle.id) {
+      const person = [...advisors, ...students].find(
+        (candidate) => candidate.id === remote.advisorId,
+      );
+      return (
+        person ?? {
+          id: remote.advisorId ?? '',
+          initials: 'OR',
+          name: remote.advisorId ?? 'Orientador',
+        }
+      );
+    }
     return resolveCurrentArticle().advisor;
   },
   get createdAt() {
-    return resolveCurrentArticle().createdAt;
+    return readBackendArticle()?.createdAt ?? resolveCurrentArticle().createdAt;
   },
   get ownerId() {
     return resolveCurrentArticle().ownerId;
@@ -809,30 +979,81 @@ export const currentArticle: Article = {
     return resolveCurrentArticle().templateVersion;
   },
   get event() {
+    const remote = readBackendArticle();
+    if (remote?.id === currentArticle.id) return `Evento ${remote.eventId.slice(0, 8)}`;
     return resolveCurrentArticle().event;
   },
   get eventId() {
-    return resolveCurrentArticle().eventId;
+    return readBackendArticle()?.eventId ?? resolveCurrentArticle().eventId;
   },
   get id() {
+    if (isBackendEnabled()) {
+      const requested =
+        window.sessionStorage.getItem(ACTIVE_KEY) ??
+        new URLSearchParams(window.location.search).get('artigo');
+      if (
+        requested &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requested)
+      ) {
+        return requested;
+      }
+    }
     return resolveCurrentArticle().id;
   },
   get initialContent() {
-    return resolveCurrentArticle().initialContent;
+    return readBackendArticle()?.content ?? resolveCurrentArticle().initialContent;
   },
   get members() {
+    const remote = readBackendArticle();
+    if (remote && remote.id === currentArticle.id) {
+      return remote.memberIds.map(
+        (id) =>
+          students.find((candidate) => candidate.id === id) ?? {
+            id,
+            initials: id.slice(0, 2).toUpperCase(),
+            name: id,
+          },
+      );
+    }
     return resolveCurrentArticle().members;
   },
   get milestones() {
+    const remote = readBackendArticle();
+    if (remote && remote.id === currentArticle.id && remote.currentMilestoneId) {
+      return [
+        {
+          deadline: remote.currentMilestoneDeadline ?? '',
+          id: remote.currentMilestoneId,
+          name:
+            remote.currentMilestoneOrder === null ? '' : `Etapa ${remote.currentMilestoneOrder}`,
+          order: remote.currentMilestoneOrder ?? 1,
+        },
+      ];
+    }
     return resolveCurrentArticle().milestones;
   },
   get team() {
-    return resolveCurrentArticle().team;
+    const remote = readBackendArticle();
+    return remote?.id === currentArticle.id
+      ? `Equipe ${remote.teamId.slice(0, 8)}`
+      : resolveCurrentArticle().team;
   },
   get title() {
+    const remote = readBackendArticle();
+    if (remote?.id === currentArticle.id)
+      return articleTitleFromContent(remote.content) ?? resolveCurrentArticle().title;
     return resolveCurrentArticle().title;
   },
 };
+
+function articleTitleFromContent(content: JSONContent | null) {
+  const nodes = content?.content ?? [];
+  const text = nodes
+    .slice(0, 6)
+    .map((node) => (node.content ?? []).map((part) => part.text ?? '').join(''))
+    .find((value) => value.trim().length > 3);
+  return text?.trim() ?? null;
+}
 
 /** Endereço de uma tela já apontando para o artigo — o aberto, quando não informado. */
 export function articleHref(path: string, articleId: string = currentArticle.id) {
@@ -842,7 +1063,95 @@ export function articleHref(path: string, articleId: string = currentArticle.id)
   return `${base}${separator}artigo=${encodeURIComponent(articleId)}${hash ? `#${hash}` : ''}`;
 }
 
-export function listArticles() {
+type BackendProgressArticle = {
+  articleId: string;
+  teamId: string;
+  advisorId: string | null;
+  memberIds: string[];
+  status: NonNullable<Article['progress']>['status'];
+  currentMilestoneId: string | null;
+  currentMilestoneOrder: number | null;
+  lastMilestoneOrder: number | null;
+  currentMilestoneDeadline: string | null;
+  pendingRemarkCount: number;
+  eventId: string;
+  createdAt: string;
+};
+
+function progressArticleToArticle(item: BackendProgressArticle): Article {
+  return {
+    advisor: item.advisorId
+      ? (advisors.find((person) => person.id === item.advisorId) ?? {
+          id: item.advisorId,
+          initials: item.advisorId.slice(0, 2).toUpperCase(),
+          name: item.advisorId,
+        })
+      : { id: '', initials: 'OR', name: 'Orientador não atribuído' },
+    createdAt: item.createdAt,
+    event: `Evento ${item.eventId.slice(0, 8)}`,
+    eventId: item.eventId,
+    id: item.articleId,
+    initialContent: null,
+    members: item.memberIds.map(
+      (id) =>
+        students.find((member) => member.id === id) ?? {
+          id,
+          initials: id.slice(0, 2).toUpperCase(),
+          name: id,
+        },
+    ),
+    milestones:
+      item.currentMilestoneId && item.currentMilestoneOrder !== null
+        ? [
+            {
+              deadline: item.currentMilestoneDeadline ?? '',
+              id: item.currentMilestoneId,
+              name: `Etapa ${item.currentMilestoneOrder}`,
+              order: item.currentMilestoneOrder,
+            },
+          ]
+        : [],
+    progress: {
+      currentMilestoneId: item.currentMilestoneId,
+      currentMilestoneOrder: item.currentMilestoneOrder,
+      lastMilestoneOrder: item.lastMilestoneOrder,
+      pendingRemarkCount: item.pendingRemarkCount,
+      status: item.status,
+    },
+    team: `Equipe ${item.teamId.slice(0, 8)}`,
+    title: `Artigo ${item.articleId.slice(0, 8)}`,
+  };
+}
+
+export async function listArticles(role = '') {
+  if (isBackendEnabled()) {
+    if (role === 'student') {
+      const { data } = await apiPagedRequest<BackendProgressArticle>(
+        '/my/articles?page=1&pageSize=100',
+      );
+      return data.map(progressArticleToArticle);
+    }
+    if (role === 'advisor') {
+      const { data } = await apiPagedRequest<BackendProgressArticle>(
+        '/progress/advisor?page=1&pageSize=100',
+      );
+      return data.map(progressArticleToArticle);
+    }
+    if (role === 'coordinator' || role === 'institutionAdmin') {
+      const { data: availableCourses } = await apiPagedRequest<{ id: string; name: string }>(
+        '/courses?page=1&pageSize=100',
+      );
+      const pages = await Promise.all(
+        availableCourses.map((course) =>
+          apiRequest<{ teams: { items: BackendProgressArticle[] } }>(
+            `/courses/${requireUuid(course.id)}/progress?page=1&pageSize=100`,
+          ),
+        ),
+      );
+      return pages.flatMap((page) => page.teams.items.map(progressArticleToArticle));
+    }
+    return [];
+  }
   return respond(() => db.read().articles);
 }
 
@@ -884,6 +1193,7 @@ function actorMember(actorId: string): TeamMember {
 
 /** Uma produção pode nascer independente ou vinculada ao evento em que o aluno se inscreveu. */
 export function createArticle(actorId: string, input: CreateArticleInput) {
+  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
   return respond((): Article => {
     assertCreator(actorId);
     if (!input.title.trim()) throw new ApiError('VALIDATION_FAILED');
@@ -975,6 +1285,7 @@ export type CreateTeamInput = {
  * `STARTED`, com o conteúdo da versão do template que o evento congelou.
  */
 export function createTeam(actorId: string, input: CreateTeamInput) {
+  if (isBackendEnabled()) return Promise.reject(new ApiError('API_UNAVAILABLE'));
   return respond((): Article => {
     const members = students.filter((student) => input.memberIds.includes(student.id));
 
@@ -1031,7 +1342,46 @@ export function createTeam(actorId: string, input: CreateTeamInput) {
 export type ArticleTemplateInfo = { template: ArticleTemplate; version: number | null };
 
 /** Conteúdo e formatação permanecem na versão escolhida ao criar o artigo. */
-export function getArticleTemplate() {
+export async function getArticleTemplate(): Promise<ArticleTemplateInfo> {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    const article = await apiRequest<BackendArticleSummary>(`/articles/${articleId}`);
+    cacheBackendArticle(article);
+    const format = article.formatProfile;
+    const contentFormat = article.content?.attrs?.vinceFormat;
+    const templateFormat =
+      contentFormat && typeof contentFormat === 'object'
+        ? (contentFormat as Record<string, unknown>)
+        : {};
+    return {
+      template: {
+        ...defaultFormat,
+        ...(typeof (templateFormat.fontFamily ?? format.fontFamily) === 'string'
+          ? { fontFamily: String(templateFormat.fontFamily ?? format.fontFamily) }
+          : {}),
+        ...(typeof (templateFormat.fontSize ?? format.fontSize) === 'number'
+          ? { fontSize: Number(templateFormat.fontSize ?? format.fontSize) }
+          : {}),
+        ...(typeof (templateFormat.lineHeight ?? format.lineHeight) === 'number'
+          ? { lineHeight: Number(templateFormat.lineHeight ?? format.lineHeight) }
+          : {}),
+        ...((templateFormat.textAlign ?? format.textAlign) === 'left'
+          ? { textAlign: 'left' as const }
+          : {}),
+        description: '',
+        id: article.templateVersionId ?? 'blank',
+        label:
+          typeof (templateFormat.norm ?? format.norm) === 'string'
+            ? String(templateFormat.norm ?? format.norm)
+            : 'ABNT',
+        title:
+          typeof (templateFormat.norm ?? format.norm) === 'string'
+            ? String(templateFormat.norm ?? format.norm)
+            : 'Norma ABNT',
+      },
+      version: null,
+    } satisfies ArticleTemplateInfo;
+  }
   return respond((): ArticleTemplateInfo => {
     const { events, templates } = db.read();
     const event = events.find((candidate) => candidate.id === currentArticle.eventId);

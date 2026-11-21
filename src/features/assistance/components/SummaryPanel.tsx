@@ -49,6 +49,12 @@ export function SummaryPanel() {
         <p className="font-semibold">{t('summary.decisionNotice')}</p>
       </Notice>
 
+      {summary.data.aiSummary && (
+        <SectionPanel title={t('summary.aiSummaryTitle')}>
+          <p className="whitespace-pre-wrap leading-7 text-vince-text">{summary.data.aiSummary}</p>
+        </SectionPanel>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label={t('summary.changed')} value={formatNumber(totals.changed)} />
         <MetricCard label={t('summary.added')} value={formatNumber(totals.added)} />

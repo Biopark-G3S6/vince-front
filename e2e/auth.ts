@@ -1,5 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
+import { demoUsers } from '../src/features/admin/model/persona';
+
 export type DemoRole = 'Aluno' | 'Orientador' | 'Coordenador' | 'Administrador';
 
 const accounts: Record<DemoRole, { email: string; userId: string }> = {
@@ -27,15 +29,20 @@ export async function loginAs(page: Page, role: DemoRole, returnToCurrentPage = 
 
 /** Prepara uma sessão para testes de matriz; os fluxos de login usam loginAs. */
 export async function setSession(page: Page, role: DemoRole) {
-  const account = accounts[role];
+  const user = {
+    Administrador: demoUsers.institutionAdmin,
+    Aluno: demoUsers.student,
+    Coordenador: demoUsers.coordinator,
+    Orientador: demoUsers.advisor,
+  }[role];
   if (page.url() === 'about:blank') await page.goto('/');
 
-  await page.evaluate((userId) => {
+  await page.evaluate((sessionUser) => {
     window.sessionStorage.setItem(
       'vinceart.session',
-      JSON.stringify({ state: { userId }, version: 0 }),
+      JSON.stringify({ state: { user: sessionUser }, version: 0 }),
     );
-  }, account.userId);
+  }, user);
 }
 
 export function sessionRoleForPath(path: string): DemoRole {

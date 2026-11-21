@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { PageScaffold, useCurrentUser, type Role } from '@features/admin';
 import { currentArticle } from '@features/articles';
+import { isBackendEnabled } from '@shared/api/client';
 import { Tabs } from '@shared/ui';
 
 import { AuthorshipPanel } from '../components/AuthorshipPanel';
@@ -26,7 +27,12 @@ export function AssistancePage() {
   const { t } = useTranslation('assistance');
   const user = useCurrentUser();
   const [selected, setSelected] = useState<TabKey>('summary');
-  const available = tabsByRole[user.role];
+  const available = tabsByRole[user.role].filter(
+    (key) =>
+      key !== 'consent' ||
+      !isBackendEnabled() ||
+      user.permissions?.includes('INSTITUTION:CONSENT_AI') === true,
+  );
   const tab = available.includes(selected) ? selected : available[0];
 
   return (

@@ -20,7 +20,7 @@ export type TeamProgress = {
   lastEditedAt: string;
   lastReturnedAt: string | null;
   members: Array<{ everEdited: boolean; name: string }>;
-  milestone: { deadline: string; name: string };
+  milestone: { deadline: string | null; name: string };
   name: string;
   pendingRemarks: number;
   /** Apontamentos devolvidos que seguem sem atendimento entre etapas. */
@@ -33,7 +33,10 @@ export type RiskSignal =
   | 'REPEATED_AUTOMATIC_DELIVERY'
   | 'REMARKS_ACCUMULATED'
   | 'MEMBER_NEVER_EDITED'
-  | 'DEADLINE_NEAR_WITHOUT_CHANGE';
+  | 'DEADLINE_NEAR_WITHOUT_CHANGE'
+  | 'DEADLINE_APPROACHING'
+  | 'DEADLINE_NEAR_WITHOUT_EDIT'
+  | 'NO_EDIT_FOR_LONG_PERIOD';
 
 export type TeamWithSignals = TeamProgress & { signals: RiskSignal[] };
 
@@ -59,7 +62,9 @@ export function evaluateRiskSignals(team: TeamProgress, now: Date): RiskSignal[]
   const signals: RiskSignal[] = [];
   const editing = team.articleStatus === 'IN_PROGRESS' || team.articleStatus === 'STARTED';
   const idleDays = (now.getTime() - new Date(team.lastEditedAt).getTime()) / DAY;
-  const daysToDeadline = (new Date(team.milestone.deadline).getTime() - now.getTime()) / DAY;
+  const daysToDeadline = team.milestone.deadline
+    ? (new Date(team.milestone.deadline).getTime() - now.getTime()) / DAY
+    : Number.NaN;
 
   if (editing && idleDays >= riskThresholds.idleDays) {
     signals.push('NO_RECENT_EDIT');
@@ -79,6 +84,7 @@ export function evaluateRiskSignals(team: TeamProgress, now: Date): RiskSignal[]
 
   if (
     editing &&
+    team.milestone.deadline !== null &&
     team.delivery === 'pending' &&
     team.lastReturnedAt !== null &&
     daysToDeadline >= 0 &&
@@ -129,6 +135,7 @@ export type CourseReport = {
   lagging: Array<{ event: string; milestone: string; team: string }>;
   notConcluded: number;
   period: string;
+  reportId?: string;
   students: number;
 };
 
