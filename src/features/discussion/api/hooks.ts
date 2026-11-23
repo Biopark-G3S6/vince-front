@@ -1,5 +1,9 @@
+import { useEffect } from 'react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { currentArticle } from '@features/articles';
+import { apiUrl, isBackendEnabled, requireUuid } from '@shared/api/client';
 import { useCurrentUser } from '@features/admin';
 
 import type { NotificationType } from '../model/discussion';
@@ -24,10 +28,29 @@ export const discussionKeys = {
 
 export function useMessages() {
   const user = useCurrentUser();
+  const queryClient = useQueryClient();
+  const queryKey = discussionKeys.messages(user.id);
+
+  useEffect(() => {
+    if (!isBackendEnabled()) return;
+    let stream: EventSource;
+    try {
+      const articleId = requireUuid(currentArticle.id);
+      stream = new EventSource(apiUrl(`/articles/${articleId}/discussion/messages/stream`), {
+        withCredentials: true,
+      });
+    } catch {
+      return;
+    }
+    const refresh = () =>
+      void queryClient.invalidateQueries({ queryKey: discussionKeys.messages(user.id) });
+    stream.addEventListener('message', refresh);
+    return () => stream.close();
+  }, [queryClient, user.id]);
 
   return useQuery({
     queryFn: () => listMessages(user.id),
-    queryKey: discussionKeys.messages(user.id),
+    queryKey,
     retry: false,
   });
 }
@@ -69,6 +92,7 @@ export function useNotifications() {
   return useQuery({
     queryFn: () => listNotifications(user.id),
     queryKey: discussionKeys.notifications(user.id),
+    refetchInterval: isBackendEnabled() ? 30_000 : false,
   });
 }
 

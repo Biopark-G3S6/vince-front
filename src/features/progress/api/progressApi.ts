@@ -8,12 +8,21 @@ import {
 import { countMessagesByAuthor } from '@features/discussion';
 import { findMilestone, isPending, readCycleOf } from '@features/review';
 import { ApiError } from '@shared/api/apiError';
+import {
+  apiFileRequest,
+  apiPagedRequest,
+  apiRequest,
+  isBackendEnabled,
+  requireUuid,
+} from '@shared/api/client';
 import { respond } from '@shared/api/mockDb';
 
 import {
   evaluateRiskSignals,
+  type ArticleStatus,
   type CourseEvent,
   type CourseReport,
+  type RiskSignal,
   type TeamContribution,
   type TeamProgress,
   type TeamWithSignals,
@@ -219,11 +228,50 @@ async function allTeams(actorId: string): Promise<TeamWithSignals[]> {
 
 /** RF-ACP-001 — Apenas as equipes de que o ator é orientador responsável (RN1). */
 export async function listAdvisorTeams(actorId: string) {
+  if (isBackendEnabled()) {
+    const { data } = await apiPagedRequest<ApiTeamProgress>(
+      '/progress/advisor?page=1&pageSize=100',
+    );
+    return data.map(toTeamProgress);
+  }
   return (await allTeams(actorId)).filter((team) => team.advisorId === actorId);
 }
 
 /** RF-ACP-002 — Eventos do curso do coordenador, com o andamento agregado. */
 export async function listCourseEvents(actorId: string): Promise<CourseEvent[]> {
+  if (isBackendEnabled()) {
+    const { data: courses } = await apiPagedRequest<{ id: string; name: string }>(
+      '/courses?page=1&pageSize=100',
+    );
+    const snapshots = await Promise.all(
+      courses.map(async (course) => ({
+        course,
+        snapshot: await apiRequest<{
+          events: Array<{
+            eventId: string;
+            teamCount: number;
+            deliveredCurrentMilestoneCount: number;
+            activeSignalTeamCount: number;
+            finishedArticleCount: number;
+          }>;
+          teams: { items: ApiTeamProgress[] };
+        }>(`/courses/${requireUuid(course.id)}/progress?page=1&pageSize=100`),
+      })),
+    );
+    return snapshots.flatMap(({ course, snapshot }) => {
+      const teams = snapshot.teams.items.map(toTeamProgress);
+      return snapshot.events.map((event) => ({
+        concluded: event.finishedArticleCount,
+        deliveredCurrent: event.deliveredCurrentMilestoneCount,
+        id: `${course.id}:${event.eventId}`,
+        name: `Evento ${event.eventId.slice(0, 8)} · ${course.name}`,
+        schedule: [],
+        scope: 'course' as const,
+        teams: teams.filter((team) => team.eventId === event.eventId),
+        withSignal: event.activeSignalTeamCount,
+      }));
+    });
+  }
   if (actorId !== COORDINATOR_ID) {
     throw new ApiError('PERMISSION_DENIED');
   }
@@ -279,6 +327,32 @@ const contributionSeeds: Record<string, Omit<TeamContribution, 'teamId' | 'teamN
 
 /** RF-ACP-004 — Contribuição de cada integrante, restrita ao orientador responsável. */
 export async function getContribution(actorId: string, teamId: string): Promise<TeamContribution> {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(teamId);
+    const result = await apiRequest<{
+      members: Array<{
+        userId: string;
+        insertedCharacters: number;
+        share: number;
+        editSessions: number;
+        addressedRemarks: number;
+        discussionMessages: number;
+      }>;
+      sufficientHistory: boolean;
+    }>(`/articles/${articleId}/contributions`);
+    return {
+      imported: !result.sufficientHistory,
+      members: result.members.map((member) => ({
+        messages: member.discussionMessages,
+        name: member.userId,
+        remarksAddressed: member.addressedRemarks,
+        sessions: member.editSessions,
+        textShare: member.share,
+      })),
+      teamId,
+      teamName: `Equipe ${teamId.slice(0, 8)}`,
+    };
+  }
   const team = (await allTeams(actorId)).find((candidate) => candidate.id === teamId);
 
   if (!team) {
@@ -335,6 +409,11 @@ const reportCourses = [
 
 /** Cursos ao alcance do ator: o que coordena, ou os da instituição que administra. */
 export function listReportCourses(actorId: string) {
+  if (isBackendEnabled()) {
+    return apiPagedRequest<{ id: string; name: string }>('/courses?page=1&pageSize=100').then(
+      ({ data }) => data,
+    );
+  }
   return respond(() => {
     if (actorId === ADMIN_ID) {
       return reportCourses;
@@ -354,6 +433,64 @@ export async function generateReport(
   courseId: string,
   period: string,
 ): Promise<CourseReport> {
+  if (isBackendEnabled()) {
+    const [yearText, semesterText] = period.split('.');
+    const year = Number(yearText);
+    const semester = Number(semesterText);
+    const startMonth = semester === 1 ? 0 : 6;
+    const periodStart = new Date(Date.UTC(year, startMonth, 1));
+    const periodEnd = new Date(Date.UTC(year, startMonth + 6, 0, 23, 59, 59, 999));
+    const [course, report] = await Promise.all([
+      apiRequest<{ name: string }>(`/courses/${requireUuid(courseId)}`),
+      apiRequest<{
+        id: string;
+        createdAt: string;
+        data: Record<string, unknown>;
+      }>(`/courses/${requireUuid(courseId)}/reports`, {
+        body: { periodStart: periodStart.toISOString(), periodEnd: periodEnd.toISOString() },
+        method: 'POST',
+      }),
+    ]);
+    const data = report.data;
+    const performance = data.performance as Record<string, unknown> | undefined;
+    const teamsByEvent =
+      (data.teamsByEvent as Array<{ eventId: string; teamCount: number }> | undefined) ?? [];
+    const lagging =
+      (data.teamsBehind as
+        Array<{ articleId: string; eventId: string; milestoneOrder: number | null }> | undefined) ??
+      [];
+    return {
+      articleGradeAverage:
+        typeof performance?.averageArticleGrade === 'number'
+          ? performance.averageArticleGrade
+          : null,
+      concluded: Number((data.articles as Record<string, unknown> | undefined)?.finished ?? 0),
+      course: course.name,
+      events: teamsByEvent.map((event) => ({
+        name: `Evento ${event.eventId.slice(0, 8)}`,
+        teams: event.teamCount,
+      })),
+      externalPublications: Number(
+        (data.externalPublications as Record<string, unknown> | undefined)?.count ?? 0,
+      ),
+      generatedAt: report.createdAt,
+      individualGradeAverage:
+        typeof performance?.averageIndividualGrade === 'number'
+          ? performance.averageIndividualGrade
+          : null,
+      lagging: lagging.map((item) => ({
+        event: `Evento ${item.eventId.slice(0, 8)}`,
+        milestone: item.milestoneOrder === null ? '' : `Etapa ${item.milestoneOrder}`,
+        team: `Equipe ${item.articleId.slice(0, 8)}`,
+      })),
+      notConcluded: Number(
+        (data.articles as Record<string, unknown> | undefined)?.notFinished ?? 0,
+      ),
+      period,
+      reportId: report.id,
+      students: Number(data.participatingStudents ?? 0),
+    };
+  }
   const reachable = await listReportCourses(actorId);
   const course = reachable.find((candidate) => candidate.id === courseId);
 
@@ -419,5 +556,72 @@ export async function generateReport(
     lagging: [],
     notConcluded: 0,
     students: 0,
+  };
+}
+
+export async function exportReport(reportId: string) {
+  return apiFileRequest(`/reports/${requireUuid(reportId)}/export?format=CSV`);
+}
+
+type ApiTeamProgress = {
+  articleId: string;
+  teamId: string;
+  advisorId: string | null;
+  memberIds: string[];
+  status: ArticleStatus;
+  currentMilestoneOrder: number | null;
+  currentMilestoneDeadline: string | null;
+  latestSubmissionAutomatic: boolean | null;
+  latestSubmissionAt: string | null;
+  pendingRemarkCount: number;
+  lastEditedAt: string;
+  consecutiveAutomaticSubmissions: number;
+  editedMemberIds: string[];
+  eventId: string;
+  activeRisks: string[];
+};
+
+function toTeamProgress(team: ApiTeamProgress): TeamWithSignals {
+  const signalValues = new Set(team.activeRisks);
+  return {
+    articleId: team.articleId,
+    advisor: team.advisorId ?? '',
+    advisorId: team.advisorId ?? '',
+    articleStatus: team.status,
+    articleTitle: `Artigo ${team.articleId.slice(0, 8)}`,
+    consecutiveAutomaticDeliveries: team.consecutiveAutomaticSubmissions,
+    delivery:
+      team.latestSubmissionAt === null
+        ? 'pending'
+        : team.latestSubmissionAutomatic
+          ? 'automatic'
+          : 'spontaneous',
+    event: `Evento ${team.eventId.slice(0, 8)}`,
+    eventId: team.eventId,
+    id: team.articleId,
+    lastEditedAt: team.lastEditedAt,
+    lastReturnedAt: null,
+    members: team.memberIds.map((id) => ({
+      everEdited: team.editedMemberIds.includes(id),
+      name: id,
+    })),
+    milestone: {
+      deadline: team.currentMilestoneDeadline,
+      name: team.currentMilestoneOrder === null ? '' : `Etapa ${team.currentMilestoneOrder}`,
+    },
+    name: `Equipe ${team.teamId.slice(0, 8)}`,
+    pendingRemarks: team.pendingRemarkCount,
+    signals: [...signalValues].flatMap((signal): RiskSignal[] => {
+      const mapped: Record<string, RiskSignal> = {
+        DEADLINE_APPROACHING: 'DEADLINE_APPROACHING',
+        DEADLINE_NEAR_WITHOUT_EDIT: 'DEADLINE_NEAR_WITHOUT_EDIT',
+        MEMBER_NEVER_EDITED: 'MEMBER_NEVER_EDITED',
+        NO_EDIT_FOR_LONG_PERIOD: 'NO_EDIT_FOR_LONG_PERIOD',
+        PENDING_REMARKS_ACCUMULATED: 'REMARKS_ACCUMULATED',
+        TWO_CONSECUTIVE_AUTOMATIC_DELIVERIES: 'REPEATED_AUTOMATIC_DELIVERY',
+      };
+      return mapped[signal] ? [mapped[signal]!] : [];
+    }),
+    unaddressedRemarks: team.pendingRemarkCount,
   };
 }

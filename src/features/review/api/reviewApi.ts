@@ -1,12 +1,15 @@
 import {
+  cacheBackendArticle,
   articleHref,
   currentArticle,
   DEMO_ARTICLE_ID,
   readArticles,
   type Article,
 } from '@features/articles';
+import type { JSONContent } from '@tiptap/core';
 import { notify, postMessage } from '@features/discussion';
 import { ApiError } from '@shared/api/apiError';
+import { apiRequest, isBackendEnabled, requireUuid } from '@shared/api/client';
 import { createId, createMockCollection, respond } from '@shared/api/mockDb';
 
 import {
@@ -159,6 +162,189 @@ function db(articleId: string = currentArticle.id) {
 const memberIds = () => currentArticle.members.map((member) => member.id);
 const advisorId = () => currentArticle.advisor.id;
 
+function toBackendParagraphs(content: unknown): Paragraph[] {
+  if (!content || typeof content !== 'object') return [];
+  const document = content as { content?: Array<Record<string, unknown>> };
+  const textOf = (node: Record<string, unknown>): string => {
+    if (node.type === 'text') return typeof node.text === 'string' ? node.text : '';
+    if (node.type === 'hardBreak') return ' ';
+    const children = Array.isArray(node.content) ? node.content : [];
+    return children
+      .filter((child): child is Record<string, unknown> => !!child && typeof child === 'object')
+      .map(textOf)
+      .join(' ');
+  };
+  const paragraphs: Paragraph[] = [];
+  let heading: { id: string; text: string } | null = null;
+  for (const [index, node] of (document.content ?? []).entries()) {
+    const attrs =
+      node.attrs && typeof node.attrs === 'object' ? (node.attrs as Record<string, unknown>) : {};
+    const id = typeof attrs.blockId === 'string' ? attrs.blockId : `block-${index}`;
+    if (id.startsWith('cover-') || node.type === 'horizontalRule') continue;
+    const text = textOf(node).trim();
+    if (node.type === 'heading') {
+      if (heading) paragraphs.push({ heading: heading.text, id: heading.id, text: '' });
+      heading = text ? { id, text } : null;
+    } else if (text) {
+      paragraphs.push(heading ? { heading: heading.text, id, text } : { id, text });
+      heading = null;
+    }
+  }
+  if (heading) paragraphs.push({ heading: heading.text, id: heading.id, text: '' });
+  return paragraphs;
+}
+
+async function getBackendCycle(actorId: string): Promise<ReviewCycle> {
+  const articleId = requireUuid(currentArticle.id);
+  const [article, submissions, remarks] = await Promise.all([
+    apiRequest<{
+      id: string;
+      eventId: string;
+      teamId: string;
+      advisorId: string | null;
+      memberIds: string[];
+      status: string;
+      currentMilestoneId: string | null;
+      currentMilestoneOrder: number | null;
+      lastMilestoneOrder: number | null;
+      currentMilestoneDeadline: string | null;
+      templateVersionId: string | null;
+      createdAt: string;
+      updatedAt: string;
+      content: unknown;
+      formatProfile: Record<string, unknown>;
+    }>(`/articles/${articleId}`),
+    apiRequest<
+      Array<{
+        id: string;
+        milestoneId: string;
+        milestoneOrder: number;
+        content: unknown;
+        submittedBy: string | null;
+        automatic: boolean;
+        revokedAt: string | null;
+        createdAt: string;
+      }>
+    >(`/articles/${articleId}/submissions`),
+    apiRequest<
+      Array<{
+        id: string;
+        submissionId: string;
+        status: string;
+        anchor: unknown;
+        originalText: string;
+        currentText: string | null;
+        body: string;
+        visibleToTeam: boolean;
+        createdBy: string;
+        decidedBy: string | null;
+        decidedAt: string | null;
+        decisionReason: string | null;
+        createdAt: string;
+      }>
+    >(`/articles/${articleId}/remarks`),
+  ]);
+  cacheBackendArticle({ ...article, content: article.content as JSONContent });
+
+  const activeSubmissions = submissions
+    .filter((submission) => submission.revokedAt === null)
+    .sort(
+      (left, right) =>
+        left.milestoneOrder - right.milestoneOrder || left.createdAt.localeCompare(right.createdAt),
+    );
+  const currentOrder =
+    article.currentMilestoneOrder ?? activeSubmissions.at(-1)?.milestoneOrder ?? 0;
+  const lastOrder = Math.max(
+    article.lastMilestoneOrder ?? 0,
+    currentOrder,
+    ...activeSubmissions.map((submission) => submission.milestoneOrder),
+  );
+  const milestoneIdByOrder = new Map(
+    activeSubmissions.map((item) => [item.milestoneOrder, item.milestoneId]),
+  );
+  if (article.currentMilestoneId && currentOrder > 0) {
+    milestoneIdByOrder.set(currentOrder, article.currentMilestoneId);
+  }
+  const milestones = Array.from({ length: lastOrder }, (_, index) => {
+    const order = index + 1;
+    const submission = activeSubmissions.find((item) => item.milestoneOrder === order);
+    return {
+      deadline: order === currentOrder ? article.currentMilestoneDeadline : null,
+      id: milestoneIdByOrder.get(order) ?? `backend-milestone-${order}`,
+      name: `Etapa ${order}`,
+      order,
+      submission,
+    };
+  });
+  const submissionsById = new Map(activeSubmissions.map((item) => [item.id, item]));
+  const mappedSubmissions: ReviewCycle['submissions'] = activeSubmissions.map((item, index) => ({
+    automatic: item.automatic,
+    id: item.id,
+    milestoneId: item.milestoneId,
+    paragraphs: toBackendParagraphs(item.content),
+    returnedAt:
+      item.milestoneOrder < currentOrder ||
+      (article.status === 'IN_PROGRESS' && index === activeSubmissions.length - 1)
+        ? article.updatedAt
+        : null,
+    submittedAt: item.createdAt,
+    submittedBy: item.submittedBy,
+  }));
+  const mappedRemarks: Remark[] = remarks.map((item) => {
+    const anchor =
+      item.anchor && typeof item.anchor === 'object'
+        ? (item.anchor as Record<string, unknown>)
+        : {};
+    const submission = submissionsById.get(item.submissionId);
+    const state = item.status as Remark['state'];
+    const hasDecision = item.decidedAt !== null || state === 'RESOLVED' || state === 'DISMISSED';
+    return {
+      authorId: item.createdBy,
+      createdAt: item.createdAt,
+      decision: hasDecision
+        ? {
+            at: item.decidedAt ?? item.createdAt,
+            by: item.decidedBy ?? '',
+            kind: state === 'OPEN' ? 'REOPENED' : state === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED',
+          }
+        : null,
+      history: [],
+      id: item.id,
+      milestoneId: submission?.milestoneId ?? '',
+      paragraphId:
+        (typeof anchor.paragraphId === 'string' && anchor.paragraphId) ||
+        (typeof anchor.blockId === 'string' && anchor.blockId) ||
+        '',
+      published: item.visibleToTeam,
+      quote: item.originalText,
+      replyMessageIds: [],
+      state,
+      submissionId: item.submissionId,
+      text: item.body,
+    };
+  });
+  const currentMilestoneId = article.currentMilestoneId ?? milestones.at(-1)?.id ?? '';
+
+  if (!article.memberIds.includes(actorId) && article.advisorId !== actorId) {
+    throw new ApiError('RESOURCE_NOT_FOUND');
+  }
+
+  return {
+    currentMilestoneId,
+    draft: toBackendParagraphs(article.content),
+    lastEditedAt: article.updatedAt,
+    milestones: milestones.map(({ deadline, id, name, order }) => ({
+      deadline,
+      id,
+      name,
+      order,
+    })),
+    remarks: mappedRemarks,
+    status: article.status as ReviewCycle['status'],
+    submissions: mappedSubmissions,
+  };
+}
+
 function isMember(actorId: string) {
   return memberIds().includes(actorId);
 }
@@ -220,6 +406,7 @@ function closeExpiredMilestone(now: Date) {
 
   if (
     !milestone ||
+    !milestone.deadline ||
     alreadyDelivered ||
     (cycle.status !== 'IN_PROGRESS' && cycle.status !== 'STARTED') ||
     now.getTime() <= new Date(milestone.deadline).getTime()
@@ -234,7 +421,7 @@ function closeExpiredMilestone(now: Date) {
       milestoneId: milestone.id,
       paragraphs: draft.draft,
       returnedAt: null,
-      submittedAt: milestone.deadline,
+      submittedAt: milestone.deadline!,
       submittedBy: null,
     });
     draft.status = 'IN_REVIEW';
@@ -249,6 +436,7 @@ function closeExpiredMilestone(now: Date) {
 }
 
 export function getReviewCycle(actorId: string) {
+  if (isBackendEnabled()) return getBackendCycle(actorId);
   return respond((): ReviewCycle => {
     if (actorId !== advisorId() && !isMember(actorId)) {
       throw new ApiError('RESOURCE_NOT_FOUND');
@@ -267,6 +455,12 @@ export function getReviewCycle(actorId: string) {
 
 /** RF-REV-001 — Entregar a versão da etapa. */
 export function deliverMilestone(actorId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest(`/articles/${requireUuid(currentArticle.id)}/submissions`, {
+      body: {},
+      method: 'POST',
+    }).then(() => undefined);
+  }
   return respond(() => {
     assertMember(actorId);
 
@@ -307,6 +501,16 @@ export function deliverMilestone(actorId: string) {
 
 /** RF-REV-002 — Desfazer a entrega. */
 export function undoDelivery(actorId: string) {
+  if (isBackendEnabled()) {
+    return getBackendCycle(actorId).then(async (cycle) => {
+      const submission = latestSubmission(cycle);
+      if (!submission) throw new ApiError('RESOURCE_NOT_FOUND');
+      await apiRequest<void>(
+        `/articles/${requireUuid(currentArticle.id)}/submissions/${requireUuid(submission.id, 'RESOURCE_NOT_FOUND')}`,
+        { method: 'DELETE' },
+      );
+    });
+  }
   return respond(() => {
     assertMember(actorId);
 
@@ -321,7 +525,7 @@ export function undoDelivery(actorId: string) {
 
       if (
         submission.automatic ||
-        (milestone && Date.now() > new Date(milestone.deadline).getTime())
+        (milestone?.deadline && Date.now() > new Date(milestone.deadline).getTime())
       ) {
         throw new ApiError('MILESTONE_DEADLINE_PASSED');
       }
@@ -351,6 +555,23 @@ export type CreateRemarkInput = {
 
 /** RF-REV-004 — Registrar apontamento no texto entregue. */
 export function createRemark(actorId: string, input: CreateRemarkInput) {
+  if (isBackendEnabled()) {
+    return getBackendCycle(actorId).then(async (cycle) => {
+      const submission = latestSubmission(cycle);
+      if (!submission) throw new ApiError('ARTICLE_NOT_IN_REVIEW');
+      await apiRequest(
+        `/articles/${requireUuid(currentArticle.id)}/submissions/${requireUuid(submission.id, 'RESOURCE_NOT_FOUND')}/remarks`,
+        {
+          body: {
+            anchor: { paragraphId: input.paragraphId, quote: input.quote },
+            originalText: input.quote,
+            body: input.text,
+          },
+          method: 'POST',
+        },
+      );
+    });
+  }
   return respond(() => {
     assertAdvisor(actorId);
 
@@ -386,6 +607,12 @@ export function createRemark(actorId: string, input: CreateRemarkInput) {
 
 /** RF-REV-005 — Alterar ou complementar apontamento. */
 export function updateRemark(actorId: string, remarkId: string, text: string) {
+  if (isBackendEnabled()) {
+    return apiRequest(
+      `/articles/${requireUuid(currentArticle.id)}/remarks/${requireUuid(remarkId, 'RESOURCE_NOT_FOUND')}`,
+      { body: { body: text }, method: 'PATCH' },
+    ).then(() => undefined);
+  }
   return respond(() => {
     if (!text.trim()) {
       throw new ApiError('VALIDATION_FAILED');
@@ -422,6 +649,12 @@ export function updateRemark(actorId: string, remarkId: string, text: string) {
 
 /** RF-REV-006 — Devolver o artigo à equipe, em ato único. */
 export function returnArticle(actorId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest(`/articles/${requireUuid(currentArticle.id)}/return`, {
+      body: {},
+      method: 'POST',
+    }).then(() => undefined);
+  }
   return respond(() => {
     assertAdvisor(actorId);
 
@@ -466,6 +699,12 @@ export function returnArticle(actorId: string) {
 
 /** RF-REV-007 — Marcar apontamento como corrigido, ou desmarcar. */
 export function setRemarkAddressed(actorId: string, remarkId: string, addressed: boolean) {
+  if (isBackendEnabled()) {
+    return apiRequest(
+      `/articles/${requireUuid(currentArticle.id)}/remarks/${requireUuid(remarkId, 'RESOURCE_NOT_FOUND')}/addressing`,
+      addressed ? { body: {}, method: 'POST' } : { method: 'DELETE' },
+    ).then(() => undefined);
+  }
   return respond(() => {
     assertMember(actorId);
 
@@ -490,6 +729,15 @@ export function setRemarkAddressed(actorId: string, remarkId: string, addressed:
 
 /** RF-REV-008 — Validar, reabrir ou dispensar apontamento. */
 export function decideRemark(actorId: string, remarkId: string, decision: RemarkDecision) {
+  if (isBackendEnabled()) {
+    return apiRequest(
+      `/articles/${requireUuid(currentArticle.id)}/remarks/${requireUuid(remarkId, 'RESOURCE_NOT_FOUND')}/decision`,
+      {
+        body: { decision: decision === 'REOPENED' ? 'OPEN' : decision },
+        method: 'POST',
+      },
+    ).then(() => undefined);
+  }
   return respond(() => {
     assertAdvisor(actorId);
 
@@ -518,6 +766,12 @@ export function decideRemark(actorId: string, remarkId: string, decision: Remark
 
 /** RF-REV-011 — Concluir o artigo. */
 export function concludeArticle(actorId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest(`/articles/${requireUuid(currentArticle.id)}/conclusion`, {
+      body: {},
+      method: 'POST',
+    }).then(() => undefined);
+  }
   return respond(() => {
     assertAdvisor(actorId);
 
@@ -558,6 +812,13 @@ export function concludeArticle(actorId: string) {
 
 /** RF-DSC-003 — A resposta ao apontamento é mensagem da discussão, com referência a ele. */
 export async function replyToRemark(actorId: string, remarkId: string, body: string) {
+  if (isBackendEnabled()) {
+    await apiRequest(`/articles/${requireUuid(currentArticle.id)}/discussion/messages`, {
+      body: { body, remarkId: requireUuid(remarkId, 'RESOURCE_NOT_FOUND') },
+      method: 'POST',
+    });
+    return;
+  }
   const remark = await respond(() => {
     assertMember(actorId);
 

@@ -26,7 +26,7 @@ export type PublicationDto = {
 export type ArticleFilters = { eventId?: string; status?: ArticleSummaryDto['status'] };
 
 /** Os artigos que o ator alcança, com os filtros de `GET /articles` (RF-ART-001). */
-export function useArticles(filters: ArticleFilters = {}) {
+export function useArticles(filters: ArticleFilters = {}, enabled = true) {
   return useQuery({
     queryKey: ['articles', 'list', filters],
     queryFn: () =>
@@ -34,6 +34,7 @@ export function useArticles(filters: ArticleFilters = {}) {
         eventId: filters.eventId || undefined,
         status: filters.status || undefined,
       }),
+    enabled,
   });
 }
 

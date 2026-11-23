@@ -93,7 +93,9 @@ export function TeamsTable({ links, showAdvisor = false, teams }: TeamsTableProp
               <td className="px-4 py-4 align-top">
                 <p className="font-semibold text-vince-text">{team.milestone.name}</p>
                 <p className="text-sm text-vince-muted">
-                  {t('table.deadline', { date: formatDate(team.milestone.deadline) })}
+                  {team.milestone.deadline
+                    ? t('table.deadline', { date: formatDate(team.milestone.deadline) })
+                    : t('table.deadlineUnknown')}
                 </p>
               </td>
               <td className="px-4 py-4 align-top">

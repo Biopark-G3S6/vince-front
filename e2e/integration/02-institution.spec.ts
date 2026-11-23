@@ -27,13 +27,13 @@ test('INS-001/002: cadastra, altera, designa e revoga administrador, desativa e 
   await page.getByRole('button', { name: 'Nova instituição' }).click();
   const dialog = page.getByRole('dialog', { name: 'Nova instituição' });
   await dialog.getByLabel('Nome institucional').fill(name);
-  await dialog.getByLabel('Sigla').fill(code);
-  await dialog.getByLabel('CNPJ / identificador').fill(cnpj);
+  await dialog.getByLabel('Sigla', { exact: true }).fill(code);
+  await dialog.getByLabel('CNPJ / identificador', { exact: true }).fill(cnpj);
   await dialog.getByLabel('Domínio institucional').fill('integracao.edu.br');
-  await dialog.getByLabel('Cidade').fill('Toledo');
-  await dialog.getByLabel('UF').fill('pr');
-  await dialog.getByLabel('E-mail de suporte').fill('suporte@integracao.edu.br');
-  await dialog.getByLabel('E-mail do administrador').fill(newAdminEmail);
+  await dialog.getByLabel('Cidade', { exact: true }).fill('Toledo');
+  await dialog.getByLabel('UF', { exact: true }).fill('pr');
+  await dialog.getByLabel('E-mail de suporte', { exact: true }).fill('suporte@integracao.edu.br');
+  await dialog.getByLabel('E-mail do administrador', { exact: true }).fill(newAdminEmail);
   await dialog.getByRole('button', { name: 'Salvar instituição' }).click();
   await expect(page.getByText('Instituição cadastrada.')).toBeVisible();
   await expect(page.getByText('Convite de administrador emitido.')).toBeVisible();
@@ -42,8 +42,8 @@ test('INS-001/002: cadastra, altera, designa e revoga administrador, desativa e 
   // Unicidade: o mesmo CNPJ é recusado com a mensagem do campo.
   await page.getByRole('button', { name: 'Nova instituição' }).click();
   await dialog.getByLabel('Nome institucional').fill(`${name} Duplicada`);
-  await dialog.getByLabel('Sigla').fill(`D${code}`.slice(0, 20));
-  await dialog.getByLabel('CNPJ / identificador').fill(cnpj);
+  await dialog.getByLabel('Sigla', { exact: true }).fill(`D${code}`.slice(0, 20));
+  await dialog.getByLabel('CNPJ / identificador', { exact: true }).fill(cnpj);
   await dialog.getByRole('button', { name: 'Salvar instituição' }).click();
   await expect(page.getByText('Já existe instituição com este CNPJ.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancelar' }).click();
@@ -54,13 +54,13 @@ test('INS-001/002: cadastra, altera, designa e revoga administrador, desativa e 
   // Abre os detalhes da nova instituição; os dados vieram da API.
   const details = page.getByRole('dialog', { name: name });
   await expect(details).toBeVisible();
-  await expect(details.getByLabel('Cidade')).toHaveValue('Toledo');
-  await expect(details.getByLabel('UF')).toHaveValue('PR');
-  await expect(details.getByLabel('Domínio')).toHaveValue('integracao.edu.br');
+  await expect(details.getByLabel('Cidade', { exact: true })).toHaveValue('Toledo');
+  await expect(details.getByLabel('UF', { exact: true })).toHaveValue('PR');
+  await expect(details.getByLabel('Domínio', { exact: true })).toHaveValue('integracao.edu.br');
   await shot(page, 'ins-01-detalhes');
 
   // Alteração persistida.
-  await details.getByLabel('Cidade').fill('Cascavel');
+  await details.getByLabel('Cidade', { exact: true }).fill('Cascavel');
   await details.getByRole('button', { name: 'Salvar alterações' }).click();
   await expect(page.getByText('Dados da instituição atualizados.')).toBeVisible();
 
@@ -96,7 +96,7 @@ test('INS-001/002: cadastra, altera, designa e revoga administrador, desativa e 
     suffix,
   );
 
-  await details.getByLabel('E-mail do administrador').fill(professor.email);
+  await details.getByLabel('E-mail do administrador', { exact: true }).fill(professor.email);
   await details.getByRole('button', { name: 'Designar ou convidar' }).click();
   await expect(page.getByText('Administrador designado.')).toBeVisible();
   await expect(details.getByText('Helena Futura')).toBeVisible();
@@ -153,13 +153,13 @@ test('INS-002: convite de administrador pela tela — aceito vira vínculo, pend
   const details = page.getByRole('dialog', { name: institution.name });
 
   // Instituição sem domínio continua editável (o domínio é opcional).
-  await details.getByLabel('Cidade').fill('Maringá');
+  await details.getByLabel('Cidade', { exact: true }).fill('Maringá');
   await details.getByRole('button', { name: 'Salvar alterações' }).click();
   await expect(page.getByText('Dados da instituição atualizados.')).toBeVisible();
 
   // Convite com validade escolhida: o link aparece e o convite fica pendente.
   const invitedEmail = `convidada.${suffix}@e2e.test`;
-  await details.getByLabel('E-mail do administrador').fill(invitedEmail);
+  await details.getByLabel('E-mail do administrador', { exact: true }).fill(invitedEmail);
   await details.getByRole('combobox', { name: 'Validade do convite' }).selectOption('15');
   await details.getByRole('button', { name: 'Designar ou convidar' }).click();
   await expect(details.getByText('Link do convite:')).toBeVisible();
@@ -170,7 +170,7 @@ test('INS-002: convite de administrador pela tela — aceito vira vínculo, pend
 
   // Um segundo convite, revogado pela tela: o link deixa de valer.
   const revokedEmail = `revogada.${suffix}@e2e.test`;
-  await details.getByLabel('E-mail do administrador').fill(revokedEmail);
+  await details.getByLabel('E-mail do administrador', { exact: true }).fill(revokedEmail);
   await details.getByRole('button', { name: 'Designar ou convidar' }).click();
   await expect(details.getByText(/\/invitations\//)).not.toHaveText(link);
   const revokedLink = (await details.getByText(/\/invitations\//).textContent()) ?? '';
@@ -180,7 +180,7 @@ test('INS-002: convite de administrador pela tela — aceito vira vínculo, pend
   await shot(page, 'ins-04-convites');
 
   // E-mail que já pertence a outra conta.
-  await details.getByLabel('E-mail do administrador').fill(ADMIN_EMAIL);
+  await details.getByLabel('E-mail do administrador', { exact: true }).fill(ADMIN_EMAIL);
   await details.getByRole('button', { name: 'Designar ou convidar' }).click();
   await expect(page.getByText(/já pertence a uma conta de outra instituição/)).toBeVisible();
 

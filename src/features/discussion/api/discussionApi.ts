@@ -1,5 +1,6 @@
 import { articleHref, currentArticle, DEMO_ARTICLE_ID } from '@features/articles';
 import { ApiError } from '@shared/api/apiError';
+import { apiPagedRequest, apiRequest, isBackendEnabled, requireUuid } from '@shared/api/client';
 import { createId, createMockCollection, respond } from '@shared/api/mockDb';
 
 import {
@@ -181,12 +182,35 @@ export type NotifyInput = {
 
 /** Registra a notificação de um fato de outra feature (RF-DSC-005). */
 export function notify(input: NotifyInput) {
+  if (isBackendEnabled()) return Promise.resolve(undefined);
   return respond(() => {
     notificationsDb.update((draft) => pushNotifications(draft, input));
   });
 }
 
 export function listMessages(actorId: string) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    return apiPagedRequest<{
+      id: string;
+      authorId: string;
+      rootId: string | null;
+      remarkId: string | null;
+      body: string | null;
+      deleted: boolean;
+      createdAt: string;
+    }>(`/articles/${articleId}/discussion/messages?page=1&pageSize=100`).then(({ data }) =>
+      data.map((message) => ({
+        authorId: message.authorId,
+        body: message.body ?? '',
+        createdAt: message.createdAt,
+        deleted: message.deleted,
+        id: message.id,
+        parentId: message.rootId,
+        remarkRef: message.remarkId ? { excerpt: '', id: message.remarkId } : null,
+      })),
+    );
+  }
   return respond(() => {
     assertParticipant(actorId);
     return messagesDb().read().messages;
@@ -206,6 +230,35 @@ export function postMessage({
   parentId = null,
   remarkRef = null,
 }: PostMessageInput) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    return apiRequest<{
+      id: string;
+      authorId: string;
+      rootId: string | null;
+      remarkId: string | null;
+      body: string | null;
+      deleted: boolean;
+      createdAt: string;
+    }>(`/articles/${articleId}/discussion/messages`, {
+      body: {
+        body,
+        ...(parentId ? { replyToId: requireUuid(parentId, 'RESOURCE_NOT_FOUND') } : {}),
+        ...(remarkRef ? { remarkId: requireUuid(remarkRef.id, 'RESOURCE_NOT_FOUND') } : {}),
+      },
+      method: 'POST',
+    }).then((message) => ({
+      authorId: message.authorId,
+      body: message.body ?? '',
+      createdAt: message.createdAt,
+      deleted: message.deleted,
+      id: message.id,
+      parentId: message.rootId,
+      remarkRef: message.remarkId
+        ? { excerpt: remarkRef?.excerpt ?? '', id: message.remarkId }
+        : null,
+    }));
+  }
   return respond(() => {
     assertParticipant(actorId);
 
@@ -248,6 +301,12 @@ export function postMessage({
 }
 
 export function deleteMessage(actorId: string, messageId: string) {
+  if (isBackendEnabled()) {
+    const articleId = requireUuid(currentArticle.id);
+    return apiRequest(`/articles/${articleId}/discussion/messages/${requireUuid(messageId)}`, {
+      method: 'DELETE',
+    });
+  }
   return respond(() => {
     assertParticipant(actorId);
 
@@ -270,6 +329,17 @@ export function deleteMessage(actorId: string, messageId: string) {
 
 /** Mensagens de um participante, por autor — insumo do quadro de contribuição. */
 export function countMessagesByAuthor() {
+  if (isBackendEnabled()) {
+    return listMessages('').then((messages) => {
+      const counts: Record<string, number> = {};
+      messages
+        .filter((message) => !message.deleted)
+        .forEach((message) => {
+          counts[message.authorId] = (counts[message.authorId] ?? 0) + 1;
+        });
+      return counts;
+    });
+  }
   return respond(() => {
     const counts: Record<string, number> = {};
 
@@ -285,6 +355,48 @@ export function countMessagesByAuthor() {
 }
 
 export function listNotifications(userId: string) {
+  if (isBackendEnabled()) {
+    return apiPagedRequest<{
+      id: string;
+      type: string;
+      targetType: string;
+      targetId: string;
+      data: Record<string, unknown>;
+      readAt: string | null;
+      createdAt: string;
+    }>('/notifications?page=1&pageSize=100').then(({ data }) =>
+      data.map((notification) => {
+        const articleId = String(notification.data.articleId ?? notification.targetId);
+        const type = notificationTypeFromApi[notification.type] ?? notification.type;
+        const page =
+          notification.targetType === 'DISCUSSION_MESSAGE'
+            ? '/admin/discussao'
+            : notification.targetType === 'ARTICLE_REMARK'
+              ? '/admin/correcao'
+              : notification.type === 'RISK_SIGNAL'
+                ? '/admin/acompanhamento'
+                : '/artigos/editor';
+        const href =
+          notification.targetType === 'ARTICLE'
+            ? articleHref(page, articleId)
+            : articleHref(
+                `${page}${notification.targetType === 'ARTICLE_REMARK' ? `?apontamento=${notification.targetId}` : ''}`,
+                articleId,
+              );
+        return {
+          createdAt: notification.createdAt,
+          href,
+          id: notification.id,
+          params: Object.fromEntries(
+            Object.entries(notification.data).map(([key, value]) => [key, String(value)]),
+          ),
+          read: notification.readAt !== null,
+          recipientId: userId,
+          type: type as NotificationType,
+        };
+      }),
+    );
+  }
   return respond(() =>
     notificationsDb
       .read()
@@ -295,6 +407,9 @@ export function listNotifications(userId: string) {
 }
 
 export function markNotificationRead(userId: string, notificationId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest(`/notifications/${requireUuid(notificationId)}/read`, { method: 'PATCH' });
+  }
   return respond(() => {
     notificationsDb.update((draft) => {
       const notification = draft.notifications.find(
@@ -311,6 +426,9 @@ export function markNotificationRead(userId: string, notificationId: string) {
 }
 
 export function markAllNotificationsRead(userId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest('/notifications/read-all', { body: {}, method: 'POST' });
+  }
   return respond(() => {
     notificationsDb.update((draft) => {
       draft.notifications
@@ -327,12 +445,34 @@ function defaultEmailPreferences(): EmailPreferences {
 }
 
 export function getEmailPreferences(userId: string) {
+  if (isBackendEnabled()) {
+    return apiRequest<{ items: Array<{ type: string; enabled: boolean }> }>(
+      '/notifications/preferences/email',
+    ).then(({ items }) => {
+      const preferences = Object.fromEntries(
+        notificationTypes.map((type) => [type, false]),
+      ) as EmailPreferences;
+      items.forEach(({ type, enabled }) => {
+        const mappedType = notificationTypeFromApi[type] ?? type;
+        if (notificationTypes.includes(mappedType as NotificationType)) {
+          preferences[mappedType as NotificationType] = enabled;
+        }
+      });
+      return preferences;
+    });
+  }
   return respond(
     () => notificationsDb.read().emailPreferences[userId] ?? defaultEmailPreferences(),
   );
 }
 
 export function setEmailPreference(userId: string, type: NotificationType, enabled: boolean) {
+  if (isBackendEnabled()) {
+    return apiRequest('/notifications/preferences/email', {
+      body: { type: notificationTypeToApi[type] ?? type, enabled },
+      method: 'PUT',
+    });
+  }
   return respond(() => {
     notificationsDb.update((draft) => {
       const current = draft.emailPreferences[userId] ?? defaultEmailPreferences();
@@ -340,3 +480,27 @@ export function setEmailPreference(userId: string, type: NotificationType, enabl
     });
   });
 }
+
+const notificationTypeFromApi: Record<string, NotificationType> = {
+  ARTICLE_FINISHED: 'ARTICLE_CONCLUDED',
+  ARTICLE_RETURNED: 'ARTICLE_RETURNED',
+  ARTICLE_SUBMITTED: 'SUBMISSION_DELIVERED',
+  AUTOMATIC_SUBMISSION: 'SUBMISSION_AUTO_CLOSED',
+  DISCUSSION_MESSAGE: 'MESSAGE_POSTED',
+  MILESTONE_DEADLINE_SOON: 'DEADLINE_APPROACHING',
+  REMARK_DECIDED: 'REMARK_DECIDED',
+  REMARK_UPDATED: 'REMARK_UPDATED',
+  RISK_SIGNAL: 'TEAM_AT_RISK',
+};
+
+const notificationTypeToApi: Partial<Record<NotificationType, string>> = {
+  ARTICLE_CONCLUDED: 'ARTICLE_FINISHED',
+  ARTICLE_RETURNED: 'ARTICLE_RETURNED',
+  DEADLINE_APPROACHING: 'MILESTONE_DEADLINE_SOON',
+  MESSAGE_POSTED: 'DISCUSSION_MESSAGE',
+  REMARK_DECIDED: 'REMARK_DECIDED',
+  REMARK_UPDATED: 'REMARK_UPDATED',
+  SUBMISSION_AUTO_CLOSED: 'AUTOMATIC_SUBMISSION',
+  SUBMISSION_DELIVERED: 'ARTICLE_SUBMITTED',
+  TEAM_AT_RISK: 'RISK_SIGNAL',
+};

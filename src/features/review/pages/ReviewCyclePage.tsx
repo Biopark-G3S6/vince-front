@@ -241,7 +241,9 @@ function ReviewWorkspace({ cycle }: { cycle: ReviewCycle }) {
                   {item.order}. {item.name}
                 </p>
                 <p className="mt-1 text-sm text-vince-muted">
-                  {t('milestone.deadline', { date: formatDateTime(item.deadline) })}
+                  {item.deadline
+                    ? t('milestone.deadline', { date: formatDateTime(item.deadline) })
+                    : t('milestone.deadlineUnknown')}
                 </p>
                 <p
                   className={cn(
@@ -287,7 +289,9 @@ function ReviewWorkspace({ cycle }: { cycle: ReviewCycle }) {
         {inProgress && !isAdvisor && (
           <Notice>
             {t('banner.studentInProgress', {
-              date: milestone ? formatDate(milestone.deadline) : '',
+              date: milestone?.deadline
+                ? formatDate(milestone.deadline)
+                : t('milestone.deadlineUnknown'),
               milestone: milestone?.name ?? '',
             })}{' '}
             {pendingCount > 0 && t('banner.studentPendingRemarks', { count: pendingCount })}

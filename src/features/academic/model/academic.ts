@@ -367,18 +367,3 @@ export const articles: ArticleEvaluation[] = [
     title: 'Impacto Ambiental Urbano',
   },
 ];
-
-export const dashboardActivities = [
-  {
-    detail: 'Equipe Alpha · Há 2 horas',
-    title: 'Novo artigo submetido: "Análise de Redes Neurais em Saúde"',
-  },
-  {
-    detail: 'Comissão de Eventos · Há 5 horas',
-    title: 'Marco atingido: Simpósio de Biotecnologia aberto para inscrições.',
-  },
-  {
-    detail: 'Sistema · Ontem',
-    title: 'Revisão pendente: 3 artigos aguardam avaliação do coordenador.',
-  },
-];

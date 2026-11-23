@@ -57,15 +57,14 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
     'language',
     'access',
   ],
+  // Sem `TEAM:READ` nem `ARTICLE:READ` (URS §2.3.1): a administração não acompanha equipes e
+  // artigos — RF-ART-001 tem por atores o aluno, o orientador e o coordenador.
   institutionAdmin: [
     'dashboard',
     'courses',
     'people',
     'events',
-    'teams',
-    'articles',
     'templates',
-    'editor',
     'notifications',
     'progress',
     'language',
@@ -77,7 +76,6 @@ const allowedSections: Record<Role, readonly AdminSection[]> = {
     'teams',
     'articles',
     'editor',
-    'templates',
     'review',
     'discussion',
     'notifications',

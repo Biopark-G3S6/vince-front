@@ -1,25 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@features/admin';
+import { isBackendEnabled } from '@shared/api/client';
 
 import {
-  allowedScopes,
   canReadArticle,
-  changeEventTemplate,
   createArticle,
-  createEvent,
   createTeam,
   getArticleTemplate,
   listArticles,
   listEvents,
-  listEventRegistrations,
-  listTemplates,
-  saveTemplate,
-  registerForEvent,
-  setEventRegistrationOpen,
-  setTemplateActive,
-  type CreateEventInput,
-  type SaveTemplateInput,
 } from './registryApi';
 
 export function useArticleTemplate() {
@@ -31,10 +21,12 @@ export function useArticles() {
 
   return useQuery({
     queryFn: async () => {
-      const articles = await listArticles();
-
-      return articles.filter((article) => canReadArticle(user.id, article));
+      const articles = await listArticles(user.role);
+      return isBackendEnabled()
+        ? articles
+        : articles.filter((article) => canReadArticle(user.id, article));
     },
+    enabled: !isBackendEnabled() || user.permissions?.includes('ARTICLE:READ') === true,
     queryKey: ['registry', 'articles', user.id],
   });
 }
@@ -45,24 +37,14 @@ export function useEventDirectory() {
 
   return useQuery({
     queryFn: async () => ({
-      articles: (await listArticles()).filter((article) => canReadArticle(user.id, article)),
+      articles: isBackendEnabled()
+        ? user.permissions?.includes('ARTICLE:READ')
+          ? await listArticles(user.role)
+          : []
+        : (await listArticles()).filter((article) => canReadArticle(user.id, article)),
       events: await listEvents(user.id),
     }),
     queryKey: ['registry', 'directory', user.id],
-    retry: false,
-  });
-}
-
-export function useTemplates() {
-  const user = useCurrentUser();
-
-  return useQuery({
-    queryFn: async () => ({
-      events: await listEvents(user.id),
-      scopes: allowedScopes(user.id),
-      templates: await listTemplates(user.id),
-    }),
-    queryKey: ['registry', 'templates', user.id],
     retry: false,
   });
 }
@@ -79,29 +61,6 @@ function useRegistryMutation<Input, Output>(
   });
 }
 
-export const useSaveTemplate = () => useRegistryMutation<SaveTemplateInput, void>(saveTemplate);
-
-export const useSetTemplateActive = () =>
-  useRegistryMutation<{ active: boolean; templateId: string }, void>(
-    (actorId, { active, templateId }) => setTemplateActive(actorId, templateId, active),
-  );
-
-export const useCreateEvent = () => useRegistryMutation<CreateEventInput, void>(createEvent);
-
-export const useChangeEventTemplate = () => useRegistryMutation<string, never>(changeEventTemplate);
-
 export const useCreateTeam = () => useRegistryMutation(createTeam);
 
 export const useCreateArticle = () => useRegistryMutation(createArticle);
-
-export function useEventRegistrations() {
-  const user = useCurrentUser();
-  return useQuery({
-    queryFn: () => listEventRegistrations(user.id),
-    queryKey: ['registry', 'registrations', user.id],
-  });
-}
-
-export const useRegisterForEvent = () => useRegistryMutation(registerForEvent);
-
-export const useSetEventRegistrationOpen = () => useRegistryMutation(setEventRegistrationOpen);

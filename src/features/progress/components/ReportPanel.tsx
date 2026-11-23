@@ -4,9 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { getErrorCode } from '@shared/api/apiError';
+import { isBackendEnabled } from '@shared/api/client';
 import { useFormatters } from '@shared/i18n';
 import { Button, ChartIcon, DownloadIcon, EmptyState, Notice, SectionPanel } from '@shared/ui';
 
+import { exportReport } from '../api/progressApi';
 import { useGenerateReport, useReportCourses } from '../api/hooks';
 import { isEmptyReport, reportPeriods, toCsv, type CourseReport } from '../model/progress';
 import { QueryFeedback } from './QueryFeedback';
@@ -128,7 +130,23 @@ function ReportView({ report }: { report: CourseReport }) {
     { label: t('report.publications'), value: formatNumber(report.externalPublications) },
   ];
 
-  function handleExport() {
+  async function handleExport() {
+    if (isBackendEnabled() && report.reportId) {
+      try {
+        const file = await exportReport(report.reportId);
+        const url = URL.createObjectURL(file.body);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `relatorio-${report.course}-${report.period}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success(t('report.exported'));
+      } catch (error) {
+        toast.error(t(`errors.${getErrorCode(error)}`, { defaultValue: t('errors.UNKNOWN') }));
+      }
+      return;
+    }
+
     const rows = [
       [title],
       [t('report.generatedAt', { date: formatDateTime(report.generatedAt) })],
@@ -168,7 +186,7 @@ function ReportView({ report }: { report: CourseReport }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-3 print:hidden">
-          <Button onClick={handleExport} variant="outline">
+          <Button onClick={() => void handleExport()} variant="outline">
             <DownloadIcon className="h-5 w-5" />
             {t('report.export')}
           </Button>

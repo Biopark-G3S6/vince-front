@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import * as Dialog from '@radix-ui/react-dialog';
-import type { Editor } from '@tiptap/core';
+import { Editor as TiptapEditor, type Editor, type JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,7 @@ import { createArticleExtensions } from '../model/extensions';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-type Converted = { file: File; html: string; messages: string[] };
+type Converted = { content: JSONContent; file: File; html: string; messages: string[] };
 
 type ImportDialogProps = {
   editor: Editor;
@@ -41,8 +41,16 @@ export function ImportDialog({ editor, onOpenChange, open }: ImportDialogProps) 
       // O conversor só é carregado quando alguém de fato importa.
       const mammoth = await import('mammoth/mammoth.browser.js');
       const result = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+      const converter = new TiptapEditor({
+        content: result.value,
+        editable: false,
+        extensions: createArticleExtensions(),
+      });
+      const content = converter.getJSON();
+      converter.destroy();
 
       setConverted({
+        content,
         file,
         html: result.value,
         messages: [...new Set(result.messages.map((message) => message.message))],
@@ -84,6 +92,7 @@ export function ImportDialog({ editor, onOpenChange, open }: ImportDialogProps) 
         fileName: converted.file.name,
         lastModified: new Date(converted.file.lastModified).toISOString(),
         sizeInBytes: converted.file.size,
+        content: converted.content,
       },
       {
         onError: () => toast.error(t('errors.ARTICLE_LOCKED_FOR_REVIEW')),

@@ -1,290 +1,569 @@
+import type { ReactNode } from 'react';
+
 import {
+  BuildingIcon,
   CalendarIcon,
   ChartIcon,
   DocumentIcon,
   GraduationCapIcon,
-  UserIcon,
   UsersIcon,
 } from '@shared/ui';
 
-import { useCurrentUser } from '@features/admin';
-import {
-  courseName,
-  useArticles,
-  useEventDirectory,
-  useEventRegistrations,
-} from '@features/articles';
-import { ArticleList } from '@features/review';
+import { hasPermission, useCurrentUser, type SessionUser } from '@features/admin';
+import { useInstitutions } from '@features/institutions';
+import { useUserNames } from '@shared/api/directory';
 
-import { dashboardActivities } from '../model/academic';
-import { useAcademicData } from '../api/academicStore';
+import { useArticles } from '../api/articleApi';
+import { useCohorts } from '../api/cohortApi';
+import { useCourses, type CourseDto } from '../api/courseApi';
+import { useEvents, useTemplates, type EventDto } from '../api/eventApi';
+import type { ArticleSummaryDto } from '../api/teamApi';
 import {
   MetricCard,
   PageScaffold,
   ProgressBar,
   SectionPanel,
+  StatusBadge,
 } from '../components/AcademicPrimitives';
 
-export function AcademicDashboardPage() {
-  const currentUser = useCurrentUser();
-  const { data: workspaceArticles = [] } = useArticles();
-  const { data: eventDirectory } = useEventDirectory();
-  const { data: registrations = [] } = useEventRegistrations();
-  const events = eventDirectory?.events ?? [];
-  const {
-    data: { articles, classGroups, courses, teams },
-  } = useAcademicData();
+/**
+ * O painel inicial de cada perfil, lido da API: o administrador de sistema vê as
+ * instituições; a gestão (administração institucional e coordenação) vê cursos, eventos e a
+ * situação dos artigos; o professor, os trabalhos sob orientação; o aluno, o próprio artigo.
+ * Não há inscrição em evento (RF-EVT-001 RN2): o aluno vê os eventos que o alcançam.
+ */
 
-  if (currentUser.role === 'coordinator') {
-    const professorCount = new Set(classGroups.flatMap((group) => group.professors)).size;
-    const studentCount = classGroups.reduce((total, group) => total + group.students, 0);
+type Status = ArticleSummaryDto['status'];
 
-    return (
-      <PageScaffold
-        activeSection="dashboard"
-        description="Acompanhe pessoas, turmas e eventos vinculados à coordenação acadêmica."
-        eyebrow="Coordenação"
-        title={`Olá, ${currentUser.name}`}
-      >
-        <section className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
-          <MetricCard
-            icon={<UserIcon className="h-5 w-5" />}
-            label="Professores"
-            value={String(professorCount)}
-          />
-          <MetricCard
-            icon={<UsersIcon className="h-5 w-5" />}
-            label="Alunos vinculados"
-            value={String(studentCount)}
-          />
-          <MetricCard
-            icon={<GraduationCapIcon className="h-5 w-5" />}
-            label="Turmas"
-            value={String(classGroups.length)}
-          />
-          <MetricCard
-            icon={<CalendarIcon className="h-5 w-5" />}
-            label="Inscrições abertas"
-            value={String(events.filter((event) => event.registrationOpen).length)}
-          />
-        </section>
+const statusView: Record<
+  Status,
+  { label: string; tone: 'success' | 'warning' | 'primary' | 'muted' }
+> = {
+  STARTED: { label: 'Iniciado', tone: 'muted' },
+  IN_PROGRESS: { label: 'Em desenvolvimento', tone: 'warning' },
+  IN_REVIEW: { label: 'Em revisão', tone: 'primary' },
+  FINISHED: { label: 'Finalizado', tone: 'success' },
+};
 
-        <section className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { href: '/admin/pessoas', label: 'Ver professores e alunos' },
-            { href: '/admin/eventos', label: 'Gerenciar eventos e avaliadores' },
-            { href: '/admin/turmas', label: 'Consultar turmas' },
-            { href: '/artigos/modelo', label: 'Escolher ou importar modelo' },
-          ].map((action) => (
-            <a
-              className="flex min-h-20 items-center justify-between rounded-lg border border-vince-border bg-white px-5 py-4 font-bold text-vince-primary shadow-sm transition-colors hover:bg-vince-tertiary"
-              href={action.href}
-              key={action.href}
-            >
-              {action.label}
-              <span aria-hidden="true">→</span>
-            </a>
-          ))}
-        </section>
+const pipeline: Status[] = ['STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'FINISHED'];
 
-        <SectionPanel className="mt-8" title="Próximos eventos">
-          <div className="grid gap-3 lg:grid-cols-2">
-            {events.map((event) => (
-              <article className="rounded-lg border border-vince-border p-5" key={event.id}>
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-vince-primary">
-                  {event.registrationOpen ? 'Inscrições abertas' : 'Inscrições fechadas'}
+const dateFormat = new Intl.DateTimeFormat('pt-BR', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
+const formatDate = (iso: string) => dateFormat.format(new Date(iso));
+
+const shortDate = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
+
+function byRecentUpdate(left: ArticleSummaryDto, right: ArticleSummaryDto) {
+  return right.updatedAt.localeCompare(left.updatedAt);
+}
+
+function QuickLinks({ links }: { links: Array<{ href: string; label: string }> }) {
+  return (
+    <section className="mt-8 grid gap-3 sm:grid-cols-3">
+      {links.map((link) => (
+        <a
+          className="flex min-h-20 items-center justify-between rounded-lg border border-vince-border bg-white px-5 py-4 font-bold text-vince-primary shadow-sm transition-colors hover:bg-vince-tertiary"
+          href={link.href}
+          key={link.href}
+        >
+          {link.label}
+          <span aria-hidden="true">→</span>
+        </a>
+      ))}
+    </section>
+  );
+}
+
+function Metrics({ children }: { children: ReactNode }) {
+  return (
+    <section className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">{children}</section>
+  );
+}
+
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="text-sm text-vince-muted">{children}</p>;
+}
+
+/** O artigo com equipe, evento, etapa corrente e orientador responsável. */
+function ArticleCards({
+  articles,
+  empty,
+  events,
+}: {
+  articles: ArticleSummaryDto[];
+  empty: string;
+  events: EventDto[];
+}) {
+  const names = useUserNames(articles.map((article) => article.advisorId));
+  const titleOf = (eventId: string) => events.find((event) => event.id === eventId)?.title;
+
+  if (articles.length === 0) return <Empty>{empty}</Empty>;
+
+  return (
+    <div className="divide-y divide-vince-border">
+      {articles.map((article) => {
+        const view = statusView[article.status];
+        return (
+          <article
+            className="flex flex-wrap items-start justify-between gap-4 py-5 first:pt-0 last:pb-0"
+            key={article.id}
+          >
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-extrabold text-vince-text">
+                {article.title ?? 'Artigo sem título'}
+              </h3>
+              <p className="mt-1 text-sm text-vince-muted">
+                {[article.teamIdentification, titleOf(article.eventId)].filter(Boolean).join(' · ')}
+              </p>
+              {article.advisorId && (
+                <p className="mt-1 text-sm text-vince-muted">
+                  Orientação: {names.nameOf(article.advisorId, '—')}
                 </p>
-                <h2 className="mt-2 text-lg font-extrabold text-vince-text">{event.name}</h2>
-                <p className="mt-2 text-sm text-vince-muted">
-                  {courseName(event.courseId) || 'Toda a instituição'} · {event.createdBy}
-                </p>
-              </article>
-            ))}
+              )}
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <StatusBadge label={view.label} tone={view.tone} />
+              {article.currentMilestoneDeadline && article.status !== 'FINISHED' && (
+                <span className="text-sm text-vince-muted">
+                  Etapa {article.currentMilestoneOrder} · até{' '}
+                  {formatDate(article.currentMilestoneDeadline)}
+                </span>
+              )}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Quantos artigos há em cada situação do ciclo (RF-ART-001). */
+function StatusBreakdown({ articles }: { articles: ArticleSummaryDto[] }) {
+  if (articles.length === 0) return <Empty>Nenhum artigo nos eventos alcançados.</Empty>;
+
+  return (
+    <div className="space-y-5">
+      {pipeline.map((status) => {
+        const count = articles.filter((article) => article.status === status).length;
+        return (
+          <div key={status}>
+            <div className="mb-2 flex items-center justify-between text-sm font-semibold">
+              <span className="text-vince-text">{statusView[status].label}</span>
+              <span className="text-vince-muted">
+                {count} {count === 1 ? 'artigo' : 'artigos'}
+              </span>
+            </div>
+            <ProgressBar value={Math.round((count / articles.length) * 100)} />
           </div>
-        </SectionPanel>
-      </PageScaffold>
-    );
-  }
+        );
+      })}
+    </div>
+  );
+}
 
-  if (currentUser.role === 'advisor' || currentUser.role === 'student') {
-    const isStudent = currentUser.role === 'student';
-
-    return (
-      <PageScaffold
-        activeSection="dashboard"
-        description={
-          isStudent
-            ? 'Escolha um modelo para escrever ou inscreva-se nos eventos disponíveis para sua turma.'
-            : 'Oriente equipes, escreva artigos e organize seus próprios eventos de teste ou TCC.'
-        }
-        eyebrow={isStudent ? 'Minha jornada' : 'Orientação'}
-        title={`Olá, ${currentUser.name}`}
-      >
-        <section className="mt-8 grid gap-3 sm:grid-cols-3 sm:gap-5">
-          <MetricCard
-            icon={<DocumentIcon className="h-5 w-5" />}
-            label={isStudent ? 'Meus artigos' : 'Artigos orientados'}
-            value={String(workspaceArticles.length)}
-          />
-          <MetricCard
-            icon={<UsersIcon className="h-5 w-5" />}
-            label={isStudent ? 'Minhas inscrições' : 'Eventos independentes'}
-            value={String(
-              isStudent
-                ? registrations.length
-                : events.filter(
-                    (event) => event.kind !== 'official' && event.createdById === currentUser.id,
-                  ).length,
-            )}
-          />
-          <MetricCard
-            icon={<ChartIcon className="h-5 w-5" />}
-            label={isStudent ? 'Eventos disponíveis' : 'Eventos oficiais'}
-            value={String(events.filter((event) => event.kind === 'official').length)}
-          />
-        </section>
-
-        <section className="mt-8 grid gap-3 sm:grid-cols-3">
-          {[
-            {
-              href: '/admin/artigos',
-              label: isStudent ? 'Abrir meus artigos' : 'Ver artigos orientados',
-            },
-            { href: '/artigos/modelo', label: 'Escolher ou importar modelo' },
-            {
-              href: '/admin/eventos',
-              label: isStudent ? 'Inscrever-me em um evento' : 'Criar evento de teste ou TCC',
-            },
-          ].map((action) => (
-            <a
-              className="flex min-h-20 items-center justify-between rounded-lg border border-vince-border bg-white px-5 py-4 font-bold text-vince-primary shadow-sm transition-colors hover:bg-vince-tertiary"
-              href={action.href}
-              key={action.href}
-            >
-              {action.label}
-              <span aria-hidden="true">→</span>
-            </a>
-          ))}
-        </section>
-
-        {isStudent && (
-          <section className="mt-8 rounded-lg border border-vince-border bg-white p-5 sm:p-7">
-            <h2 className="text-xl font-extrabold text-vince-text">Como participar de um evento</h2>
-            <ol className="mt-4 grid gap-4 sm:grid-cols-3">
-              {[
-                [
-                  '1. Encontre o evento',
-                  'Consulte os eventos disponibilizados pela coordenação e os prazos de inscrição.',
-                ],
-                [
-                  '2. Confirme sua inscrição',
-                  'Abra o evento e clique em Inscrever-me. Sua participação ficará registrada.',
-                ],
-                [
-                  '3. Escolha o modelo',
-                  'Use artigo científico, resumo expandido, um modelo oficial do evento ou importe seu próprio modelo.',
-                ],
-              ].map(([title, description]) => (
-                <li className="rounded-lg bg-vince-surface p-4" key={title}>
-                  <h3 className="font-bold text-vince-primary">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-vince-muted">{description}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-
-        <ArticleList title={isStudent ? 'Meu trabalho em andamento' : 'Trabalhos sob orientação'} />
-      </PageScaffold>
-    );
-  }
-
-  const metrics = [
-    {
-      icon: <GraduationCapIcon className="h-5 w-5" />,
-      label: 'Cursos ativos',
-      value: String(courses.filter((course) => course.status === 'active').length),
-    },
-    {
-      icon: <CalendarIcon className="h-5 w-5" />,
-      label: 'Turmas abertas',
-      value: String(classGroups.filter((group) => group.status === 'active').length),
-    },
-    { icon: <UsersIcon className="h-5 w-5" />, label: 'Equipes', value: String(teams.length) },
-    {
-      icon: <DocumentIcon className="h-5 w-5" />,
-      label: 'Artigos',
-      value: String(articles.length),
-    },
-    {
-      icon: <ChartIcon className="h-5 w-5" />,
-      label: 'Eventos ativos',
-      value: String(events.filter((event) => event.registrationOpen).length),
-    },
-  ];
+function SystemDashboard() {
+  const { data: institutions = [] } = useInstitutions();
+  const active = institutions.filter((institution) => institution.status === 'active');
 
   return (
     <PageScaffold
       activeSection="dashboard"
-      description="Bem-vindo de volta. Aqui está o resumo operacional das atividades acadêmicas recentes."
+      description="Instituições atendidas pela plataforma e a situação de cada uma."
       eyebrow="Dashboard"
-      title="Visão Geral Acadêmica"
+      title="Visão Geral da Plataforma"
     >
-      <section className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-5">
-        {metrics.map((metric) => (
-          <MetricCard
-            icon={metric.icon}
-            key={metric.label}
-            label={metric.label}
-            value={metric.value}
-          />
-        ))}
-      </section>
+      <Metrics>
+        <MetricCard
+          icon={<BuildingIcon className="h-5 w-5" />}
+          label="Instituições ativas"
+          value={String(active.length)}
+        />
+        <MetricCard
+          icon={<BuildingIcon className="h-5 w-5" />}
+          label="Instituições desativadas"
+          value={String(institutions.length - active.length)}
+        />
+      </Metrics>
 
-      <section className="mt-10 grid gap-8 xl:grid-cols-[1fr_1fr]">
-        <SectionPanel title="Situação das Equipes">
-          <div className="space-y-6">
-            {teams.map((team) => (
-              <article className="rounded-lg border border-[#ead9dd] p-5" key={team.id}>
+      <SectionPanel
+        actions={
+          <a
+            className="font-semibold text-vince-primary hover:underline"
+            href="/admin/instituicoes"
+          >
+            Gerenciar
+          </a>
+        }
+        className="mt-8"
+        title="Instituições"
+      >
+        {institutions.length === 0 ? (
+          <Empty>Nenhuma instituição cadastrada.</Empty>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {institutions.map((institution) => (
+              <article className="rounded-lg border border-vince-border p-5" key={institution.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-extrabold text-vince-text">{team.name}</h3>
-                    <p className="mt-1 text-sm text-vince-muted">{team.article}</p>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-extrabold text-vince-text">{institution.name}</h3>
+                    <p className="mt-1 text-sm text-vince-muted">
+                      {[
+                        institution.acronym,
+                        [institution.city, institution.state].filter(Boolean).join('/'),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
                   </div>
+                  <StatusBadge
+                    label={institution.status === 'active' ? 'Ativa' : 'Desativada'}
+                    tone={institution.status === 'active' ? 'success' : 'muted'}
+                  />
                 </div>
-                <div className="mt-5">
-                  <ProgressBar value={team.progress} />
-                </div>
+                {institution.domain && (
+                  <p className="mt-3 text-sm text-vince-primary">{institution.domain}</p>
+                )}
               </article>
             ))}
           </div>
-        </SectionPanel>
-
-        <SectionPanel
-          actions={
-            <a className="font-semibold text-vince-primary hover:underline" href="/admin/artigos">
-              Ver todos
-            </a>
-          }
-          title="Indicadores Acadêmicos"
-        >
-          <div className="divide-y divide-vince-border">
-            {dashboardActivities.map((activity) => (
-              <article className="flex gap-4 py-5 first:pt-0 last:pb-0" key={activity.title}>
-                <span className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-vince-tertiary text-vince-primary">
-                  <DocumentIcon className="h-5 w-5" />
-                </span>
-                <div>
-                  <h3 className="text-lg font-semibold leading-7 text-vince-text">
-                    {activity.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-vince-muted">{activity.detail}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionPanel>
-      </section>
+        )}
+      </SectionPanel>
     </PageScaffold>
   );
+}
+
+/**
+ * Os eventos ativos com o escopo legível. A contagem de equipes vem dos artigos alcançados;
+ * sem nenhum (ou sem leitura de artigos), mostra só o limite do evento.
+ */
+function ActiveEvents({
+  articles,
+  events,
+  scopeOf,
+}: {
+  articles: ArticleSummaryDto[] | null;
+  events: EventDto[];
+  scopeOf: (event: EventDto) => string;
+}) {
+  if (events.length === 0) return <Empty>Nenhum evento ativo.</Empty>;
+
+  return (
+    <div className="divide-y divide-vince-border">
+      {events.map((event) => {
+        const teams = articles?.filter((article) => article.eventId === event.id).length;
+        const limit = `${event.maxTeams} ${event.maxTeams === 1 ? 'equipe' : 'equipes'}`;
+        return (
+          <article className="py-4 first:pt-0 last:pb-0" key={event.id}>
+            <p className="text-xs font-bold uppercase tracking-[0.08em] text-vince-primary">
+              {scopeOf(event)}
+            </p>
+            <h3 className="mt-1 font-extrabold text-vince-text">{event.title}</h3>
+            <p className="mt-1 text-sm text-vince-muted">
+              {event.theme} · {teams ? `${teams} de ${limit}` : `até ${limit}`}
+            </p>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Os cursos com o coordenador corrente (RF-CUR-002). */
+function CourseCoordination({ courses }: { courses: CourseDto[] }) {
+  const names = useUserNames(courses.map((course) => course.coordinatorId));
+
+  if (courses.length === 0) return <Empty>Nenhum curso cadastrado.</Empty>;
+
+  return (
+    <div className="divide-y divide-vince-border">
+      {courses.map((course) => (
+        <article
+          className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0"
+          key={course.id}
+        >
+          <div className="min-w-0">
+            <h3 className="font-extrabold text-vince-text">{course.name}</h3>
+            <p className="mt-1 text-sm text-vince-muted">
+              {course.coordinatorId
+                ? `Coordenação: ${names.nameOf(course.coordinatorId, '—')}`
+                : 'Sem coordenador designado'}
+            </p>
+          </div>
+          <StatusBadge
+            label={course.active ? course.identification : 'Desativado'}
+            tone={course.active ? 'primary' : 'muted'}
+          />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+const viewAll = (href: string, label: string) => (
+  <a className="font-semibold text-vince-primary hover:underline" href={href}>
+    {label}
+  </a>
+);
+
+/**
+ * A gestão: coordenação e administração institucional. Só a coordenação acompanha equipes e
+ * artigos (RF-ART-001); a administração, sem `ARTICLE:READ`, vê cursos, eventos e modelos.
+ */
+function ManagementDashboard({ user }: { user: SessionUser }) {
+  const can = (permission: string) => hasPermission(user, permission);
+  const isCoordinator = user.role === 'coordinator';
+  const readsArticles = can('ARTICLE:READ');
+  const { data: courses = [] } = useCourses(can('COURSE:READ'));
+  const { cohorts } = useCohorts(can('COHORT:READ'));
+  const { data: events = [] } = useEvents();
+  const { data: articles = [] } = useArticles({}, readsArticles);
+  const { data: templates = [] } = useTemplates(!readsArticles && can('TEMPLATE:READ'));
+
+  const ownCourses = isCoordinator
+    ? courses.filter((course) => course.coordinatorId === user.id)
+    : courses.filter((course) => course.active);
+  const activeEvents = events.filter((event) => event.status === 'ACTIVE');
+  const recent = [...articles].sort(byRecentUpdate).slice(0, 5);
+
+  const scopeOf = (event: EventDto) => {
+    const course = courses.find((item) => item.id === event.courseId)?.name;
+    if (event.scopeType === 'INSTITUTION') return 'Toda a instituição';
+    if (event.scopeType === 'COURSE') return course ?? 'Curso';
+    const cohort = cohorts.find((item) => item.id === event.scopeId)?.identification;
+    return [cohort ? `Turma ${cohort}` : 'Turma', course].filter(Boolean).join(' · ');
+  };
+
+  if (!readsArticles) {
+    return (
+      <PageScaffold
+        activeSection="dashboard"
+        description="Resumo da instituição: cursos e coordenação, eventos em andamento e modelos de artigo."
+        eyebrow="Dashboard"
+        title="Visão Geral Acadêmica"
+      >
+        <Metrics>
+          <MetricCard
+            icon={<GraduationCapIcon className="h-5 w-5" />}
+            label="Cursos ativos"
+            value={String(ownCourses.length)}
+          />
+          <MetricCard
+            icon={<UsersIcon className="h-5 w-5" />}
+            label="Cursos sem coordenador"
+            value={String(ownCourses.filter((course) => !course.coordinatorId).length)}
+          />
+          <MetricCard
+            icon={<CalendarIcon className="h-5 w-5" />}
+            label="Eventos ativos"
+            value={String(activeEvents.length)}
+          />
+          <MetricCard
+            icon={<DocumentIcon className="h-5 w-5" />}
+            label="Modelos de artigo"
+            value={String(templates.filter((template) => template.active).length)}
+          />
+        </Metrics>
+
+        <section className="mt-8 grid gap-8 xl:grid-cols-2">
+          <SectionPanel
+            actions={viewAll('/admin/cursos', 'Ver cursos')}
+            title="Cursos e coordenação"
+          >
+            <CourseCoordination courses={courses} />
+          </SectionPanel>
+          <SectionPanel
+            actions={viewAll('/admin/eventos', 'Ver eventos')}
+            title="Eventos em andamento"
+          >
+            <ActiveEvents articles={null} events={activeEvents} scopeOf={scopeOf} />
+          </SectionPanel>
+        </section>
+      </PageScaffold>
+    );
+  }
+
+  return (
+    <PageScaffold
+      activeSection="dashboard"
+      description={
+        isCoordinator
+          ? 'Acompanhe os cursos que você coordena, os eventos e a produção das equipes.'
+          : 'Resumo dos cursos, dos eventos em andamento e da situação dos artigos.'
+      }
+      eyebrow={isCoordinator ? 'Coordenação' : 'Dashboard'}
+      title={isCoordinator ? `Olá, ${user.name}` : 'Visão Geral Acadêmica'}
+    >
+      <Metrics>
+        <MetricCard
+          icon={<GraduationCapIcon className="h-5 w-5" />}
+          label={isCoordinator ? 'Cursos coordenados' : 'Cursos ativos'}
+          value={String(ownCourses.length)}
+        />
+        <MetricCard
+          icon={<UsersIcon className="h-5 w-5" />}
+          label="Equipes"
+          value={String(articles.length)}
+        />
+        <MetricCard
+          icon={<CalendarIcon className="h-5 w-5" />}
+          label="Eventos ativos"
+          value={String(activeEvents.length)}
+        />
+        <MetricCard
+          icon={<DocumentIcon className="h-5 w-5" />}
+          label="Artigos finalizados"
+          value={String(articles.filter((article) => article.status === 'FINISHED').length)}
+        />
+      </Metrics>
+
+      <section className="mt-8 grid gap-8 xl:grid-cols-2">
+        <SectionPanel title="Situação dos artigos">
+          <StatusBreakdown articles={articles} />
+        </SectionPanel>
+        <SectionPanel
+          actions={viewAll('/admin/eventos', 'Ver eventos')}
+          title="Eventos em andamento"
+        >
+          <ActiveEvents articles={articles} events={activeEvents} scopeOf={scopeOf} />
+        </SectionPanel>
+      </section>
+
+      <SectionPanel
+        actions={viewAll('/admin/artigos', 'Ver todos')}
+        className="mt-8"
+        title="Artigos atualizados recentemente"
+      >
+        <ArticleCards
+          articles={recent}
+          empty="Nenhum artigo nos eventos alcançados."
+          events={events}
+        />
+      </SectionPanel>
+    </PageScaffold>
+  );
+}
+
+function AdvisorDashboard({ user }: { user: SessionUser }) {
+  const { data: events = [] } = useEvents();
+  const { data: articles = [] } = useArticles();
+  const advised = articles.filter((article) => article.advisorId === user.id);
+
+  return (
+    <PageScaffold
+      activeSection="dashboard"
+      description="Acompanhe as equipes que você orienta e as entregas que aguardam correção."
+      eyebrow="Orientação"
+      title={`Olá, ${user.name}`}
+    >
+      <Metrics>
+        <MetricCard
+          icon={<UsersIcon className="h-5 w-5" />}
+          label="Equipes sob orientação"
+          value={String(advised.length)}
+        />
+        <MetricCard
+          icon={<DocumentIcon className="h-5 w-5" />}
+          label="Aguardando correção"
+          value={String(advised.filter((article) => article.status === 'IN_REVIEW').length)}
+        />
+        <MetricCard
+          icon={<ChartIcon className="h-5 w-5" />}
+          label="Artigos finalizados"
+          value={String(advised.filter((article) => article.status === 'FINISHED').length)}
+        />
+        <MetricCard
+          icon={<CalendarIcon className="h-5 w-5" />}
+          label="Eventos"
+          value={String(events.filter((event) => event.status === 'ACTIVE').length)}
+        />
+      </Metrics>
+
+      <QuickLinks
+        links={[
+          { href: '/admin/artigos', label: 'Ver artigos orientados' },
+          { href: '/admin/equipes', label: 'Ver equipes' },
+          { href: '/admin/eventos', label: 'Ver eventos' },
+        ]}
+      />
+
+      <SectionPanel className="mt-8" title="Trabalhos sob orientação">
+        <ArticleCards
+          articles={[...advised].sort(byRecentUpdate)}
+          empty="Nenhuma equipe tem você como orientador responsável."
+          events={events}
+        />
+      </SectionPanel>
+    </PageScaffold>
+  );
+}
+
+function StudentDashboard({ user }: { user: SessionUser }) {
+  const { data: events = [] } = useEvents();
+  const { data: articles = [] } = useArticles();
+  const own = articles.filter((article) => article.memberIds.includes(user.id));
+  const nextDeadline = own
+    .filter((article) => article.status !== 'FINISHED' && article.currentMilestoneDeadline)
+    .map((article) => article.currentMilestoneDeadline as string)
+    .sort()[0];
+
+  return (
+    <PageScaffold
+      activeSection="dashboard"
+      description="Acompanhe o artigo da sua equipe, os prazos do cronograma e os eventos da sua turma."
+      eyebrow="Minha jornada"
+      title={`Olá, ${user.name}`}
+    >
+      <Metrics>
+        <MetricCard
+          icon={<DocumentIcon className="h-5 w-5" />}
+          label="Meus artigos"
+          value={String(own.length)}
+        />
+        <MetricCard
+          icon={<CalendarIcon className="h-5 w-5" />}
+          label="Meus eventos"
+          value={String(events.filter((event) => event.status === 'ACTIVE').length)}
+        />
+        <MetricCard
+          icon={<ChartIcon className="h-5 w-5" />}
+          label="Próxima entrega"
+          value={nextDeadline ? shortDate.format(new Date(nextDeadline)) : '—'}
+        />
+        <MetricCard
+          icon={<UsersIcon className="h-5 w-5" />}
+          label="Artigos finalizados"
+          value={String(own.filter((article) => article.status === 'FINISHED').length)}
+        />
+      </Metrics>
+
+      <QuickLinks
+        links={[
+          { href: '/admin/artigos', label: 'Abrir meus artigos' },
+          { href: '/admin/equipes', label: 'Minha equipe' },
+          { href: '/admin/eventos', label: 'Eventos da turma' },
+        ]}
+      />
+
+      <SectionPanel className="mt-8" title="Meu trabalho em andamento">
+        <ArticleCards
+          articles={[...own].sort(byRecentUpdate)}
+          empty="Você ainda não integra uma equipe. Consulte os eventos da sua turma em Equipes."
+          events={events}
+        />
+      </SectionPanel>
+    </PageScaffold>
+  );
+}
+
+export function AcademicDashboardPage() {
+  const user = useCurrentUser();
+
+  if (user.role === 'systemAdmin') return <SystemDashboard />;
+  if (user.role === 'student') return <StudentDashboard user={user} />;
+  if (user.role === 'advisor') return <AdvisorDashboard user={user} />;
+  return <ManagementDashboard user={user} />;
 }

@@ -1,8 +1,9 @@
 # VinceArt — Frontend
 
 Portal acadêmico em React, TypeScript e Vite, entregue como aplicação estática.
-A versão deste repositório é uma **demonstração navegável com dados locais**: permite
-experimentar equipes, artigos, edição, correção, discussão e acompanhamento sem backend.
+Por padrão, o frontend executa a demonstração com dados locais. Com `VITE_USE_BACKEND=true`,
+usa sessão e cookies do backend para as rotas disponíveis de templates, edição, correção,
+discussão/notificações, assistência, acompanhamento/relatórios e idioma.
 
 A revisão dos requisitos, as lacunas e os limites da demonstração estão em
 [`AUDITORIA.md`](AUDITORIA.md). A especificação disponível é [`docs/URS.docx`](docs/URS.docx),
@@ -57,20 +58,29 @@ independentes e seus artigos ficam fora da gestão e dos relatórios da coordena
 `convite@vinceart.edu.br` abre a definição de senha e
 `inativo@vinceart.edu.br` demonstra o bloqueio por instituição inativa.
 
-Não é necessário criar `.env` para a demonstração. A configuração de `.env.example`
-e o proxy `/api` preparam uma futura integração com
-[vince-back](https://github.com/Biopark-G3S6/vince-back).
+Não é necessário criar `.env` para a demonstração. Para conectar ao backend local, copie
+`.env.example` para `.env`, inicie o backend na porta 3000 e altere `VITE_USE_BACKEND=true`.
+O proxy do Vite encaminha `/api` para `VITE_API_URL`; a base padrão das chamadas é `/api/v1`.
+O login usa as contas e credenciais configuradas no backend, não os usuários de demonstração.
+
+No modo backend, templates institucionais e restritos a cursos usam o cadastro real; o
+coordenador escolhe um dos cursos que coordena e o administrador pode escolher um curso ou a
+instituição inteira. A API ainda não oferece eventos, equipes nem criação de artigos. Por isso,
+a seleção de template ao criar um evento/artigo permanece desabilitada. Os artigos existentes
+são listados para orientadores, coordenadores, administradores e integrantes das equipes; os
+nomes de evento e equipe aparecem como identificadores curtos quando não há cadastro disponível.
 
 ## Dados e limites
 
-- O perfil é definido pelo login e não pode ser trocado dentro das telas protegidas.
+- No modo demonstração, o perfil é definido pelo login simulado e não pode ser trocado dentro das telas protegidas.
   Menu, dashboard, artigos e ações são adaptados à sessão da aba.
-- Os fluxos de artigo, templates, correção e discussão usam o armazenamento local do navegador.
+- No modo demonstração, os fluxos de artigo, templates, correção e discussão usam o armazenamento local do navegador.
   O botão “Restaurar dados de demonstração” reinicia os exemplos dessas áreas.
 - A identidade da sessão e o artigo selecionado ficam no armazenamento de sessão da aba. Instituições
   e cadastros acadêmicos persistem neste navegador; perfil e concessões de acesso são exemplos em memória.
-- A coedição e as atualizações entre abas funcionam na mesma origem do mesmo navegador.
-  Sincronização entre dispositivos, e-mails e IA externa dependem de serviços ainda não integrados.
+- No modo demonstração, a coedição e as atualizações entre abas funcionam na mesma origem do navegador.
+  No modo backend, o documento é salvo no servidor, mas a sincronização Yjs entre dispositivos
+  ainda não está publicada na API.
 - Perfil, senha e permissões na tela de acesso não alteram contas reais. Relatórios e
   indicadores incluem dados de exemplo, conforme detalhado na auditoria.
 
@@ -133,11 +143,19 @@ TanStack Router, por si só, não o torna o roteador ativo. O editor é carregad
 demanda. Em hospedagem estática, configure fallback de caminhos para `index.html`,
 permitindo recarregar URLs como `/admin/equipes`.
 
-## Integração e aceite pendentes
+## Contrato e limitações atuais
 
 A arquitetura prevista usa cookie `HttpOnly`, endpoint de identidade e autorização
 em cada operação no backend. Não armazene tokens ou senhas no navegador. Ocultar uma
 ação na interface não substitui autorização no servidor.
+
+O modo backend usa `POST /sessions`, `GET /identity` e as permissões de cada rota do servidor.
+As chamadas incluem `credentials: include`, token CSRF, correlação de requisição e renovação única
+da identidade quando um token CSRF rotacionado é recusado.
+
+Os templates preservam as versões retornadas pelo backend. As referências, conteúdo, histórico,
+entregas e apontamentos também são lidos ou gravados por rotas da API. O idioma efetivo suportado
+pela API atual é pt-BR.
 
 As metas de experiência são LCP ≤ 2,5 s, INP ≤ 200 ms e CLS ≤ 0,1 no percentil 75.
 Esses limites exigem medição própria; aprovação de build, testes e capturas não
