@@ -117,8 +117,12 @@ export function EventsPage() {
   const scopeName = (event: EventDto) => {
     if (event.scopeType === 'COURSE')
       return courses.find((course) => course.id === event.scopeId)?.name;
+    // Sem leitura de turmas (a administração institucional), a turma aparece pelo curso.
     if (event.scopeType === 'COHORT')
-      return cohorts.find((cohort) => cohort.id === event.scopeId)?.identification;
+      return (
+        cohorts.find((cohort) => cohort.id === event.scopeId)?.identification ??
+        courses.find((course) => course.id === event.courseId)?.name
+      );
     return 'Toda a instituição';
   };
 
