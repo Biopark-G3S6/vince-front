@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import { cn } from '@shared/lib/cn';
 
@@ -75,13 +75,20 @@ type SectionPanelProps = {
   title: string;
 };
 
+/** O título nomeia a seção (`aria-labelledby`): leitores de tela a listam como região. */
 export function SectionPanel({ actions, children, className, title }: SectionPanelProps) {
+  const titleId = useId();
+
   return (
     <section
+      aria-labelledby={titleId}
       className={cn('min-w-0 rounded-lg border border-vince-border bg-white shadow-sm', className)}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-vince-border px-4 py-4 sm:px-6 sm:py-5">
-        <h2 className="min-w-0 break-words text-lg font-extrabold text-vince-text sm:text-xl">
+        <h2
+          className="min-w-0 break-words text-lg font-extrabold text-vince-text sm:text-xl"
+          id={titleId}
+        >
           {title}
         </h2>
         {actions}
